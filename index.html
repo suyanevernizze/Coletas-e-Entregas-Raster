@@ -1,0 +1,523 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Binotto — Controle de Monitoramento</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+
+  <!-- ① DADOS: troque este arquivo sem mexer em mais nada -->
+  <script src="dados.js"></script>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+    }
+
+    /* ── TOP BAR ── */
+    .topbar {
+      padding: 0 24px;
+      display: flex; align-items: center; gap: 16px;
+      height: 56px;
+      position: sticky; top: 0; z-index: 100;
+    }
+    .logo-box {
+      border-radius: 6px;
+      width: 32px; height: 32px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 700; font-size: 14px; color: #fff;
+      flex-shrink: 0;
+    }
+    .logo-text { color: #fff; font-weight: 700; font-size: 15px; letter-spacing: 0.03em; }
+    .logo-sub  { font-size: 10px; margin-top: 1px; }
+    .topbar-right { margin-left: auto; }
+    .file-badge {
+      border-radius: 6px;
+      padding: 5px 12px;
+      font-size: 11px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .file-badge i { font-size: 14px; }
+
+    /* ── NAVBAR ── */
+    .navbar {
+      background: #fff;
+      padding: 0 24px;
+      display: flex;
+      position: sticky; top: 56px; z-index: 99;
+    }
+    .nav-tab {
+      padding: 13px 18px;
+      font-size: 12px; font-weight: 600;
+      cursor: pointer;
+      border-bottom: 3px solid transparent;
+      display: flex; align-items: center; gap: 7px;
+      transition: color 0.15s;
+      user-select: none;
+      margin-bottom: -2px;
+    }
+    .nav-tab i { font-size: 15px; }
+
+    /* ── LAYOUT ── */
+    .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── KPI ── */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 10px; margin-bottom: 20px;
+    }
+    .kpi {
+      background: #fff;
+      border-radius: 8px;
+      padding: 13px 15px;
+      border-left: 4px solid #ccc;
+    }
+    .kpi-label { font-size: 10px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
+    .kpi-val   { font-size: 20px; font-weight: 700; }
+    .kpi-sub   { font-size: 10px; margin-top: 3px; }
+
+    /* ── CARDS ── */
+    .grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+    .grid-full { margin-bottom: 14px; }
+    .card { background: #fff; border-radius: 10px; padding: 15px 17px; }
+    .card-title {
+      font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 0.07em;
+      margin-bottom: 11px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .card-title i { font-size: 13px; }
+
+    /* ── LEGENDAS ── */
+    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 9px; font-size: 11px; }
+    .legend span { display: flex; align-items: center; gap: 4px; }
+    .ld { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+    /* ── REGRA STRIP ── */
+    .rule-strip {
+      border-radius: 0 6px 6px 0;
+      padding: 10px 14px;
+      margin-bottom: 18px;
+      font-size: 11px; line-height: 1.8;
+    }
+
+    /* ── CRUZAMENTO ── */
+    .cross-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 14px; }
+    .cross-cell { border-radius: 8px; padding: 11px 13px; border-top: 2px solid #ccc; }
+    .cross-cell-title { font-size: 10px; margin-bottom: 5px; }
+    .cross-cell-val   { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
+    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 680px) {
+      .grid-2, .cross-grid { grid-template-columns: 1fr; }
+      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    }
+  </style>
+</head>
+<body>
+
+<script>
+  // ── Aplicar cores da paleta via JS (lidas de dados.js) ──
+  document.body.style.background = CORES.fundoGeral;
+  document.body.style.color      = CORES.navTabActive;
+</script>
+
+<!-- TOP BAR -->
+<div class="topbar" id="topbar">
+  <div class="logo-box" id="logoBox"></div>
+  <div>
+    <div class="logo-text" id="logoText"></div>
+    <div class="logo-sub"  id="logoSub"></div>
+  </div>
+  <div class="topbar-right">
+    <div class="file-badge" id="fileBadge">
+      <i class="ti ti-file-spreadsheet" aria-hidden="true"></i>
+      <span id="fileBadgeText"></span>
+    </div>
+  </div>
+</div>
+
+<!-- NAVBAR -->
+<div class="navbar" id="navbar">
+  <div class="nav-tab active" onclick="showTab('ce')" id="tab-ce">
+    <i class="ti ti-truck-delivery" aria-hidden="true"></i> Coletas &amp; Entregas
+  </div>
+  <div class="nav-tab" onclick="showTab('sm')" id="tab-sm">
+    <i class="ti ti-shield-check" aria-hidden="true"></i> SM — Solicitações de monitoramento
+  </div>
+</div>
+
+<!-- CONTEÚDO -->
+<div class="content">
+
+  <!-- ═══ ABA 1 — COLETAS & ENTREGAS ═══ -->
+  <div class="tab-panel active" id="panel-ce">
+
+    <div class="kpi-row" id="kpi-ce"></div>
+
+    <div class="grid-2">
+      <div class="card" id="card-classificacao">
+        <div class="card-title"><i class="ti ti-map-pin" aria-hidden="true"></i>Classificação geral de chegada</div>
+        <div class="legend" id="leg-classificacao"></div>
+        <div style="position:relative;height:200px">
+          <canvas id="chart-classificacao" role="img" aria-label="Distribuição de classificação de chegada"></canvas>
+        </div>
+      </div>
+      <div class="card" id="card-saida">
+        <div class="card-title"><i class="ti ti-logout" aria-hidden="true"></i>Status de saída do local</div>
+        <div class="legend" id="leg-saida"></div>
+        <div style="position:relative;height:200px">
+          <canvas id="chart-saida" role="img" aria-label="Status de saída do local"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card" id="card-alvo">
+        <div class="card-title"><i class="ti ti-target" aria-hidden="true"></i>Finalização (tempo no alvo)</div>
+        <div class="legend" id="leg-alvo"></div>
+        <div style="position:relative;height:180px">
+          <canvas id="chart-alvo" role="img" aria-label="Finalização no alvo"></canvas>
+        </div>
+      </div>
+      <div class="card" id="card-vinculo">
+        <div class="card-title"><i class="ti ti-truck" aria-hidden="true"></i>Vínculo do veículo</div>
+        <div class="legend" id="leg-vinculo"></div>
+        <div style="position:relative;height:180px">
+          <canvas id="chart-vinculo" role="img" aria-label="Vínculo do veículo"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid-full card" id="card-filial-ce">
+      <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação completa por filial</div>
+      <div class="legend" id="leg-filial-ce"></div>
+      <div style="position:relative;height:310px">
+        <canvas id="chart-filial-ce" role="img" aria-label="Classificação completa por filial empilhada"></canvas>
+      </div>
+    </div>
+
+    <div class="grid-full card" id="card-ce2" style="margin-top:14px">
+      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Coletas vs. entregas por filial</div>
+      <div class="legend">
+        <span><span class="ld" id="ld-coletas"></span><span id="label-coletas">Coletas</span></span>
+        <span><span class="ld" id="ld-entregas"></span><span id="label-entregas">Entregas</span></span>
+      </div>
+      <div style="position:relative;height:250px">
+        <canvas id="chart-coletas-entregas" role="img" aria-label="Coletas e entregas por filial"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ═══ ABA 2 — SM ═══ -->
+  <div class="tab-panel" id="panel-sm">
+
+    <div class="rule-strip" id="rule-strip"></div>
+
+    <div class="kpi-row" id="kpi-sm"></div>
+
+    <div class="grid-2">
+      <div class="card" id="card-sm-dist">
+        <div class="card-title"><i class="ti ti-shield" aria-hidden="true"></i>Distribuição completa</div>
+        <div class="legend" id="leg-sm-dist"></div>
+        <div style="position:relative;height:210px">
+          <canvas id="chart-sm-dist" role="img" aria-label="Distribuição SM completa"></canvas>
+        </div>
+      </div>
+      <div class="card" id="card-poligono">
+        <div class="card-title"><i class="ti ti-hexagon-letter-p" aria-hidden="true"></i>Polígono incorreto por filial</div>
+        <div style="position:relative;height:210px">
+          <canvas id="chart-poligono" role="img" aria-label="Polígono incorreto por filial"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="cross-grid" id="cards-cruzamento"></div>
+
+    <div class="grid-full card" id="card-filial-sm">
+      <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação SM completa por filial</div>
+      <div class="legend" id="leg-filial-sm"></div>
+      <div style="position:relative;height:330px">
+        <canvas id="chart-filial-sm" role="img" aria-label="Classificação SM por filial empilhada"></canvas>
+      </div>
+    </div>
+
+    <div class="grid-full card" id="card-pct" style="margin-top:14px">
+      <div class="card-title"><i class="ti ti-percentage" aria-hidden="true"></i>% no prazo · % polígono incorreto · % abertura FP por filial</div>
+      <div class="legend">
+        <span><span class="ld" id="ld-pct-np"></span>% No prazo</span>
+        <span><span class="ld" id="ld-pct-pol"></span>% Polígono incorreto</span>
+        <span><span class="ld" id="ld-pct-afp"></span>% Abertura fora do prazo</span>
+      </div>
+      <div style="position:relative;height:310px">
+        <canvas id="chart-pct-filial" role="img" aria-label="Percentuais por filial"></canvas>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ═══ SCRIPTS DE RENDERIZAÇÃO ═══ -->
+<script>
+
+// ── Navegação ──────────────────────────────────────────────
+function showTab(t) {
+  ["ce", "sm"].forEach(id => {
+    document.getElementById("panel-" + id).classList.toggle("active", id === t);
+    document.getElementById("tab-" + id).classList.toggle("active", id === t);
+  });
+}
+
+// ── Helpers ────────────────────────────────────────────────
+function applyStyle(el, styles) {
+  Object.assign(el.style, styles);
+}
+
+function legend(elId, items) {
+  document.getElementById(elId).innerHTML = items
+    .map(([l, c]) => `<span><span class="ld" style="background:${c}"></span>${l}</span>`)
+    .join("");
+}
+
+function donut(id, data, colors, bg) {
+  new Chart(document.getElementById(id), {
+    type: "doughnut",
+    data: { datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: bg || CORES.fundoGeral }] },
+    options: {
+      responsive: true, maintainAspectRatio: false, cutout: "62%",
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed.toLocaleString("pt-BR")}` } },
+      },
+    },
+  });
+}
+
+const TICK = () => ({ font: { size: 10 }, color: CORES.navTabInativo });
+
+function hbarStacked(id, labels, datasets) {
+  new Chart(document.getElementById(id), {
+    type: "bar", data: { labels, datasets },
+    options: {
+      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { stacked: true, min: 0, grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
+        y: { stacked: true, ticks: TICK() },
+      },
+    },
+  });
+}
+
+function hbarSimples(id, labels, data, cor) {
+  new Chart(document.getElementById(id), {
+    type: "bar",
+    data: { labels, datasets: [{ data, backgroundColor: cor, borderRadius: 4 }] },
+    options: {
+      indexAxis: "y", responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { min: 0, grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
+        y: { ticks: TICK() },
+      },
+    },
+  });
+}
+
+function barAgrupada(id, labels, datasets) {
+  new Chart(document.getElementById(id), {
+    type: "bar", data: { labels, datasets },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { ...TICK(), maxRotation: 30, autoSkip: false } },
+        y: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
+      },
+    },
+  });
+}
+
+// ── Aplicar cores estruturais ─────────────────────────────
+const topbar = document.getElementById("topbar");
+applyStyle(topbar, { background: CORES.topbarBg });
+
+const navbar = document.getElementById("navbar");
+applyStyle(navbar, { borderBottom: `2px solid ${CORES.navbarBorder}` });
+
+["ce","sm"].forEach(id => {
+  const t = document.getElementById("tab-" + id);
+  applyStyle(t, { color: CORES.navTabInativo });
+  t.addEventListener("click", () => {
+    ["ce","sm"].forEach(x => {
+      const el = document.getElementById("tab-" + x);
+      const isActive = x === id;
+      el.style.color       = isActive ? CORES.navTabActive : CORES.navTabInativo;
+      el.style.borderBottom = isActive ? `3px solid ${CORES.navTabLine}` : "3px solid transparent";
+    });
+  });
+});
+document.getElementById("tab-ce").style.borderBottom = `3px solid ${CORES.navTabLine}`;
+document.getElementById("tab-ce").style.color = CORES.navTabActive;
+
+// Logo box
+const logoBox = document.getElementById("logoBox");
+applyStyle(logoBox, { background: CORES.topbarAccent });
+logoBox.textContent = CONFIG.empresa[0];
+
+document.getElementById("logoText").textContent = CONFIG.empresa;
+applyStyle(document.getElementById("logoSub"), { color: CORES.topbarSub });
+document.getElementById("logoSub").textContent  = CONFIG.subtitulo;
+
+// File badge
+const fb = document.getElementById("fileBadge");
+applyStyle(fb, { background: CORES.badgeBg, border: `0.5px solid ${CORES.badgeBorder}`, color: CORES.badgeText });
+fb.querySelector("i").style.color = CORES.topbarSub;
+document.getElementById("fileBadgeText").textContent = CONFIG.arquivo + " · " + CONFIG.totalRegistros + " registros";
+
+// Cards — border e card-title
+document.querySelectorAll(".card").forEach(c => {
+  c.style.border = `0.5px solid ${CORES.cardBorder}`;
+});
+document.querySelectorAll(".card-title").forEach(t => {
+  t.style.color = CORES.navTabInativo;
+  const icon = t.querySelector("i");
+  if (icon) icon.style.color = CORES.noPrazo;
+});
+document.querySelectorAll(".kpi-label").forEach(l => l.style.color = CORES.navTabInativo);
+document.querySelectorAll(".kpi-sub").forEach(l => l.style.color = CORES.topbarSub);
+document.querySelectorAll(".legend").forEach(l => l.style.color = CORES.navTabActive);
+document.querySelectorAll(".cross-cell").forEach(c => {
+  c.style.background = CORES.crossCellBg;
+  c.style.border = `0.5px solid ${CORES.cardBorder}`;
+});
+document.querySelectorAll(".cross-cell-title").forEach(t => t.style.color = CORES.navTabInativo);
+
+// ── Rule strip ────────────────────────────────────────────
+const rs = document.getElementById("rule-strip");
+applyStyle(rs, {
+  background:  CORES.ruleBg,
+  borderLeft:  `3px solid ${CORES.ruleBorder}`,
+  color:       CORES.navTabActive,
+});
+rs.innerHTML = `
+  <strong style="color:${CORES.topbarBg}">Regra de classificação:</strong><br>
+  <span style="color:${CORES.noPrazo};font-weight:700">No prazo</span> = ${REGRAS.descricao.noPrazo} &nbsp;|&nbsp;
+  <span style="color:${CORES.foraDoPrazo};font-weight:700">Fora do prazo</span> = ${REGRAS.descricao.foraDoPrazo}<br>
+  <span style="color:${CORES.aberturaForaPrazo};font-weight:700">Abertura fora do prazo</span> = ${REGRAS.descricao.aberturaForaPrazo} &nbsp;|&nbsp;
+  <span style="color:${CORES.poligonoIncorreto};font-weight:700">Polígono incorreto</span> = ${REGRAS.descricao.poligonoIncorreto}
+`;
+
+// ── KPIs ──────────────────────────────────────────────────
+const COR_MAP = {
+  blue:   CORES.kpiBlue,
+  green:  CORES.kpiGreen,
+  red:    CORES.kpiRed,
+  amber:  CORES.kpiAmber,
+  purple: CORES.kpiPurple,
+  gray:   CORES.kpiGray,
+  teal:   "#4B99A6",
+};
+
+function renderKPIs(elId, kpis) {
+  document.getElementById(elId).innerHTML = kpis.map(k => `
+    <div class="kpi" style="border:0.5px solid ${CORES.cardBorder};border-left:4px solid ${k.borderColor}">
+      <div class="kpi-label" style="color:${CORES.navTabInativo}">${k.label}</div>
+      <div class="kpi-val" style="color:${COR_MAP[k.cor] || CORES.navTabActive}">${k.valor}</div>
+      <div class="kpi-sub" style="color:${CORES.topbarSub}">${k.sub}</div>
+    </div>`).join("");
+}
+renderKPIs("kpi-ce", KPI_CE);
+renderKPIs("kpi-sm", KPI_SM);
+
+// ── Cards de cruzamento ───────────────────────────────────
+document.getElementById("cards-cruzamento").innerHTML = CARDS_CRUZAMENTO.map(c => `
+  <div class="cross-cell" style="background:${CORES.crossCellBg};border:0.5px solid ${CORES.cardBorder};border-top:2px solid ${c.borderColor}">
+    <div class="cross-cell-title" style="color:${CORES.navTabInativo}">${c.titulo}</div>
+    <div class="cross-cell-val" style="color:${c.corValor}">
+      ${c.valor}
+      <span class="badge" style="background:${c.corBadgeBg};color:${c.corBadgeText}">${c.pct}</span>
+    </div>
+  </div>`).join("");
+
+// ── Legendas coletas/entregas ─────────────────────────────
+document.getElementById("ld-coletas").style.background  = CORES.coletas;
+document.getElementById("ld-entregas").style.background = CORES.entregas;
+document.getElementById("ld-pct-np").style.background   = CORES.noPrazo;
+document.getElementById("ld-pct-pol").style.background  = CORES.poligonoIncorreto;
+document.getElementById("ld-pct-afp").style.background  = CORES.aberturaForaPrazo;
+
+// ── Donuts ────────────────────────────────────────────────
+const CORES_CLASSIF = [CORES.foraDoPrazo, CORES.noPrazo, CORES.aberturaForaPrazo, CORES.poligonoIncorreto, CORES.cancelada];
+
+legend("leg-classificacao", DONUT_CLASSIFICACAO.labels.map((l, i) => [`${l} ${DONUT_CLASSIFICACAO.pcts[i]}`, CORES_CLASSIF[i]]));
+donut("chart-classificacao", DONUT_CLASSIFICACAO.data, CORES_CLASSIF);
+
+const CORES_SAIDA = [CORES.noPrazo, CORES.foraDoPrazo, CORES.saidaNR, CORES.saidaNI];
+legend("leg-saida", DONUT_SAIDA.labels.map((l, i) => [`${l} ${DONUT_SAIDA.pcts[i]}`, CORES_SAIDA[i]]));
+donut("chart-saida", DONUT_SAIDA.data, CORES_SAIDA);
+
+const CORES_ALVO = [CORES.dentroAlvo, CORES.foraAlvo];
+legend("leg-alvo", DONUT_ALVO.labels.map((l, i) => [`${l} ${DONUT_ALVO.pcts[i]}`, CORES_ALVO[i]]));
+donut("chart-alvo", DONUT_ALVO.data, CORES_ALVO);
+
+const CORES_VINC = [CORES.agregado, CORES.terceiro, CORES.frota];
+legend("leg-vinculo", DONUT_VINCULO.labels.map((l, i) => [`${l} ${DONUT_VINCULO.pcts[i]}`, CORES_VINC[i]]));
+donut("chart-vinculo", DONUT_VINCULO.data, CORES_VINC);
+
+legend("leg-sm-dist", DONUT_CLASSIFICACAO.labels.map((l, i) => [`${l} ${DONUT_CLASSIFICACAO.pcts[i]}`, CORES_CLASSIF[i]]));
+donut("chart-sm-dist", DONUT_CLASSIFICACAO.data, CORES_CLASSIF);
+
+// ── Datasets filial ───────────────────────────────────────
+const LEG_FILIAL = [
+  ["No prazo",           CORES.noPrazo],
+  ["Fora do prazo",      CORES.foraDoPrazo],
+  ["Abertura FP",        CORES.aberturaForaPrazo],
+  ["Polígono incorreto", CORES.poligonoIncorreto],
+  ["Cancelada",          CORES.cancelada],
+];
+legend("leg-filial-ce", LEG_FILIAL);
+legend("leg-filial-sm", LEG_FILIAL);
+
+const DS_FILIAL = [
+  { label: "No prazo",           data: FILIAL_DADOS.noPrazo,           backgroundColor: CORES.noPrazo,           borderRadius: 2 },
+  { label: "Fora do prazo",      data: FILIAL_DADOS.foraDoPrazo,       backgroundColor: CORES.foraDoPrazo,       borderRadius: 2 },
+  { label: "Abertura FP",        data: FILIAL_DADOS.aberturaForaPrazo, backgroundColor: CORES.aberturaForaPrazo, borderRadius: 2 },
+  { label: "Polígono incorreto", data: FILIAL_DADOS.poligonoIncorreto, backgroundColor: CORES.poligonoIncorreto, borderRadius: 2 },
+  { label: "Cancelada",          data: FILIAL_DADOS.cancelada,         backgroundColor: CORES.cancelada,         borderRadius: 2 },
+];
+
+hbarStacked("chart-filial-ce", FILIAIS, DS_FILIAL);
+hbarStacked("chart-filial-sm", FILIAIS, DS_FILIAL);
+
+// ── Coletas vs Entregas ───────────────────────────────────
+barAgrupada("chart-coletas-entregas", FILIAIS, [
+  { label: "Coletas",  data: FILIAL_DADOS.coletas,  backgroundColor: CORES.coletas,  borderRadius: 3 },
+  { label: "Entregas", data: FILIAL_DADOS.entregas, backgroundColor: CORES.entregas, borderRadius: 3 },
+]);
+
+// ── Polígono incorreto ────────────────────────────────────
+hbarSimples("chart-poligono", FILIAIS, FILIAL_DADOS.poligonoIncorreto, CORES.poligonoIncorreto);
+
+// ── % por filial ──────────────────────────────────────────
+const totais = FILIAIS.map((_, i) =>
+  FILIAL_DADOS.noPrazo[i] + FILIAL_DADOS.foraDoPrazo[i] +
+  FILIAL_DADOS.aberturaForaPrazo[i] + FILIAL_DADOS.poligonoIncorreto[i] + FILIAL_DADOS.cancelada[i]
+);
+barAgrupada("chart-pct-filial", FILIAIS, [
+  { label: "% No prazo",    data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.noPrazo[i]           / totais[i] * 100)), backgroundColor: CORES.noPrazo,           borderRadius: 3 },
+  { label: "% Polígono",    data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.poligonoIncorreto[i] / totais[i] * 100)), backgroundColor: CORES.poligonoIncorreto, borderRadius: 3 },
+  { label: "% Abertura FP", data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.aberturaForaPrazo[i] / totais[i] * 100)), backgroundColor: CORES.aberturaForaPrazo, borderRadius: 3 },
+]);
+
+</script>
+</body>
+</html>
