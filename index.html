@@ -1,523 +1,676 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Binotto — Controle de Monitoramento</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>Binotto · Painel de Monitoramento</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
-
-  <!-- ① DADOS: troque este arquivo sem mexer em mais nada -->
   <script src="dados.js"></script>
-
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: system-ui, -apple-system, sans-serif;
-      min-height: 100vh;
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+    html{scroll-behavior:smooth}
+    body{font-family:'Inter',system-ui,sans-serif;min-height:100vh;transition:background .25s,color .25s}
+
+    /* ══════════════════════════════════════
+       TEMAS — dark / light
+    ══════════════════════════════════════ */
+    body.dark{
+      --bg:#0A0F0D; --surface:#0D1A11; --surface2:#111D15;
+      --border:#1E3328; --border2:#1A2E1F;
+      --text:#E8EDE9; --text2:#6B9A78; --text3:#2D6B3E;
+      --topbar:#0D1A11; --topbar-bdr:#1E3328;
+      --navpill:rgba(255,255,255,.08); --navpill-bdr:rgba(255,255,255,.12);
+      --logo-bg:#ffffff; --logo-txt:#004B24;
+      --badge-bg:#152219; --badge-bdr:rgba(255,255,255,.12); --badge-txt:rgba(255,255,255,.6);
+      --btn-bg:rgba(255,255,255,.15); --btn-bdr:rgba(255,255,255,.2);
+      --rule-bg:#0D1A11; --rule-bdr:#1E3328;
+      --kpi-bw:rgba(255,255,255,.04);
+      --ch-grid:rgba(255,255,255,.04); --ch-tick:#2D6B3E; --ch-bdr:#1E3328;
+      --tt-bg:#111D15; --tt-bdr:#1E3328; --tt-title:#8DBD9A; --tt-body:#6B9A78;
+      --ch-dot:#0D1A11;
+      --toggle-bg:rgba(255,255,255,.15); --toggle-bdr:rgba(255,255,255,.2);
+      --filter-bar:#0D1A11;
+    }
+    body.light{
+      --bg:#F4F6F4; --surface:#FFFFFF; --surface2:#F0F4F1;
+      --border:#D8E2DA; --border2:#C8D8CC;
+      --text:#0F2318; --text2:#4A6B53; --text3:#7FA889;
+      --topbar:#004B24; --topbar-bdr:#003A1C;
+      --navpill:rgba(255,255,255,.15); --navpill-bdr:rgba(255,255,255,.25);
+      --logo-bg:#ffffff; --logo-txt:#004B24;
+      --badge-bg:rgba(255,255,255,.15); --badge-bdr:rgba(255,255,255,.2); --badge-txt:rgba(255,255,255,.85);
+      --btn-bg:rgba(255,255,255,.2); --btn-bdr:rgba(255,255,255,.3);
+      --rule-bg:#EBF5EE; --rule-bdr:#D8E2DA;
+      --kpi-bw:rgba(0,0,0,.06);
+      --ch-grid:rgba(0,0,0,.05); --ch-tick:#4A6B53; --ch-bdr:#D8E2DA;
+      --tt-bg:#FFFFFF; --tt-bdr:#D8E2DA; --tt-title:#0F2318; --tt-body:#4A6B53;
+      --ch-dot:#FFFFFF;
+      --toggle-bg:rgba(255,255,255,.2); --toggle-bdr:rgba(255,255,255,.3);
+      --filter-bar:#FFFFFF;
     }
 
-    /* ── TOP BAR ── */
-    .topbar {
-      padding: 0 24px;
-      display: flex; align-items: center; gap: 16px;
-      height: 56px;
-      position: sticky; top: 0; z-index: 100;
-    }
-    .logo-box {
-      border-radius: 6px;
-      width: 32px; height: 32px;
-      display: flex; align-items: center; justify-content: center;
-      font-weight: 700; font-size: 14px; color: #fff;
-      flex-shrink: 0;
-    }
-    .logo-text { color: #fff; font-weight: 700; font-size: 15px; letter-spacing: 0.03em; }
-    .logo-sub  { font-size: 10px; margin-top: 1px; }
-    .topbar-right { margin-left: auto; }
-    .file-badge {
-      border-radius: 6px;
-      padding: 5px 12px;
-      font-size: 11px;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .file-badge i { font-size: 14px; }
+    body{background:var(--bg);color:var(--text)}
 
-    /* ── NAVBAR ── */
-    .navbar {
-      background: #fff;
-      padding: 0 24px;
-      display: flex;
-      position: sticky; top: 56px; z-index: 99;
-    }
-    .nav-tab {
-      padding: 13px 18px;
-      font-size: 12px; font-weight: 600;
-      cursor: pointer;
-      border-bottom: 3px solid transparent;
-      display: flex; align-items: center; gap: 7px;
-      transition: color 0.15s;
-      user-select: none;
-      margin-bottom: -2px;
-    }
-    .nav-tab i { font-size: 15px; }
+    /* ══════════════════════════════════════
+       UPLOAD
+    ══════════════════════════════════════ */
+    #upload-screen{min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:28px;padding:24px}
+    .up-brand{display:flex;align-items:center;gap:16px}
+    .up-logo{width:52px;height:52px;border-radius:12px;background:var(--logo-bg);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;color:var(--logo-txt);box-shadow:0 2px 12px rgba(0,0,0,.18)}
+    .up-name{font-size:26px;font-weight:700;letter-spacing:.05em;line-height:1}
+    .up-sub{font-size:10px;letter-spacing:.17em;text-transform:uppercase;margin-top:4px;color:var(--text2)}
+    .drop-zone{width:460px;max-width:95vw;border:1.5px dashed var(--border);border-radius:18px;padding:52px 36px;text-align:center;cursor:pointer;transition:all .22s;background:var(--surface);position:relative}
+    .drop-zone.over{border-color:#004B24;transform:scale(1.02);background:var(--surface2)}
+    .drop-zone input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%}
+    .drop-icon{font-size:52px;color:var(--text3);margin-bottom:16px;display:block;transition:color .2s,transform .2s}
+    .drop-zone.over .drop-icon{color:#004B24;transform:translateY(-6px)}
+    .drop-title{font-size:17px;font-weight:700;color:var(--text);margin-bottom:7px}
+    .drop-sub{font-size:12px;color:var(--text2);margin-bottom:18px;line-height:1.6}
+    .ext-row{display:flex;gap:8px;justify-content:center}
+    .ext-tag{font-size:10px;font-weight:700;padding:4px 12px;border-radius:20px;background:var(--surface2);color:var(--text2);border:1px solid var(--border);letter-spacing:.05em}
+    .up-theme-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--text2)}
+    .up-footer{font-size:11px;color:var(--text3);text-align:center;line-height:1.7;max-width:360px}
+    .up-footer i{font-size:12px;vertical-align:-1px;margin-right:4px}
 
-    /* ── LAYOUT ── */
-    .content { padding: 24px; max-width: 1400px; margin: 0 auto; }
-    .tab-panel { display: none; }
-    .tab-panel.active { display: block; }
+    /* ══════════════════════════════════════
+       THEME TOGGLE
+    ══════════════════════════════════════ */
+    .theme-toggle{width:36px;height:20px;background:var(--toggle-bg);border:1px solid var(--toggle-bdr);border-radius:20px;cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+    .theme-toggle::after{content:"";position:absolute;top:2px;left:2px;width:14px;height:14px;border-radius:50%;background:#fff;transition:transform .22s}
+    body.light .theme-toggle::after{transform:translateX(16px)}
+    .theme-icon{font-size:14px;color:rgba(255,255,255,.7);cursor:pointer;display:flex;align-items:center}
+
+    /* ══════════════════════════════════════
+       APP SHELL
+    ══════════════════════════════════════ */
+    #app-screen{display:none;flex-direction:column;min-height:100vh}
+
+    /* ── Topbar ── */
+    .topbar{background:var(--topbar);border-bottom:1px solid var(--topbar-bdr);padding:0 24px;height:58px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:100}
+    .logo-mark{width:34px;height:34px;border-radius:8px;background:var(--logo-bg);display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--logo-txt);flex-shrink:0;border:1px solid rgba(255,255,255,.18);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+    .brand-name{font-size:15px;font-weight:700;color:#fff;letter-spacing:.06em;line-height:1}
+    .brand-sub{font-size:9px;font-weight:500;letter-spacing:.15em;text-transform:uppercase;margin-top:2px;color:rgba(255,255,255,.5)}
+    .topbar-center{flex:1;display:flex;justify-content:center}
+    .nav-pills{display:flex;background:var(--navpill);border:1px solid var(--navpill-bdr);border-radius:10px;padding:3px;gap:2px}
+    .nav-pill{padding:6px 16px;border-radius:7px;font-size:11px;font-weight:600;color:rgba(255,255,255,.5);cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:6px;white-space:nowrap;user-select:none;letter-spacing:.02em}
+    .nav-pill i{font-size:13px}
+    .nav-pill.on{background:rgba(255,255,255,.2);color:#fff}
+    .nav-pill:hover:not(.on){color:rgba(255,255,255,.8)}
+    .topbar-right{display:flex;align-items:center;gap:8px}
+    .file-badge{background:var(--badge-bg);border:1px solid var(--badge-bdr);border-radius:8px;padding:5px 12px;font-size:10px;color:var(--badge-txt);display:flex;align-items:center;gap:6px;font-weight:500}
+    .file-badge i{font-size:12px;opacity:.6}
+    .btn-swap{background:var(--btn-bg);border:1px solid var(--btn-bdr);border-radius:8px;padding:5px 12px;font-size:11px;font-weight:600;color:#fff;cursor:pointer;display:flex;align-items:center;gap:5px;transition:background .15s}
+    .btn-swap:hover{background:rgba(255,255,255,.25)}
+
+    /* ── Filter bar ── */
+    .filter-bar{background:var(--filter-bar);border-bottom:1px solid var(--border);padding:9px 24px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;position:sticky;top:58px;z-index:99}
+    .filter-group{display:flex;align-items:center;gap:7px}
+    .filter-label{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.1em}
+    .filter-select{background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:5px 10px;font-size:11px;font-weight:500;color:var(--text);cursor:pointer;outline:none;transition:border-color .15s;font-family:inherit}
+    .filter-select:focus{border-color:#004B24}
+    .filter-chip{background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:3px 10px;font-size:10px;font-weight:600;color:var(--text2);display:flex;align-items:center;gap:5px;margin-left:auto;transition:all .18s}
+    .filter-chip i{font-size:11px}
+    .filter-chip.lit{border-color:#004B24;color:#004B24}
+    body.dark .filter-chip.lit{border-color:#2D6B3E;color:#4A7A5A}
+
+    /* ── Layout ── */
+    .main{flex:1;padding:20px 24px;display:flex;flex-direction:column;gap:14px;max-width:1400px;width:100%;margin:0 auto}
+    .tab-panel{display:none}
+    .tab-panel.active{display:flex;flex-direction:column;gap:14px}
+
+    /* ── Section divider ── */
+    .sdiv{display:flex;align-items:center;gap:10px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--text3)}
+    .sdiv::before,.sdiv::after{content:"";flex:1;height:1px;background:var(--border)}
 
     /* ── KPI ── */
-    .kpi-row {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
-      gap: 10px; margin-bottom: 20px;
-    }
-    .kpi {
-      background: #fff;
-      border-radius: 8px;
-      padding: 13px 15px;
-      border-left: 4px solid #ccc;
-    }
-    .kpi-label { font-size: 10px; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.06em; }
-    .kpi-val   { font-size: 20px; font-weight: 700; }
-    .kpi-sub   { font-size: 10px; margin-top: 3px; }
+    .kpi-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:9px}
+    .kpi-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:13px 15px;position:relative;overflow:hidden;transition:border-color .18s,transform .18s}
+    .kpi-card:hover{border-color:#004B24;transform:translateY(-1px)}
+    .kpi-card::after{content:"";position:absolute;top:0;left:0;right:0;height:2px;border-radius:2px 2px 0 0}
+    .kpi-card.np::after{background:#00BFA5}.kpi-card.fp::after{background:#EF5350}
+    .kpi-card.afp::after{background:#FB8C00}.kpi-card.pol::after{background:#7C83E0}
+    .kpi-card.can::after{background:#607D8B}.kpi-card.col::after{background:#29B6F6}
+    .kpi-card.ent::after{background:#66BB6A}.kpi-card.tot::after{background:#004B24}
+    .kpi-icon{font-size:16px;margin-bottom:7px;display:block}
+    .kpi-label{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:5px}
+    .kpi-val{font-size:21px;font-weight:700;line-height:1;margin-bottom:3px}
+    .kpi-sub{font-size:10px;color:var(--text3);font-weight:500}
+    .kpi-bar{height:2px;background:var(--kpi-bw);border-radius:2px;margin-top:9px;overflow:hidden}
+    .kpi-bar-fill{height:100%;border-radius:2px}
 
-    /* ── CARDS ── */
-    .grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
-    .grid-full { margin-bottom: 14px; }
-    .card { background: #fff; border-radius: 10px; padding: 15px 17px; }
-    .card-title {
-      font-size: 10px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 0.07em;
-      margin-bottom: 11px;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .card-title i { font-size: 13px; }
+    /* ── Cards ── */
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:15px 17px;transition:border-color .18s}
+    .card:hover{border-color:var(--border2)}
+    .card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;padding-bottom:9px;border-bottom:1px solid var(--border);flex-wrap:wrap;gap:8px}
+    .card-title{font-size:10px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.08em;display:flex;align-items:center;gap:6px}
+    .card-title i{font-size:14px;color:#004B24}
+    body.dark .card-title i{color:#2D6B3E}
+    .legend{display:flex;flex-wrap:wrap;gap:7px}
+    .legend span{display:flex;align-items:center;gap:4px;font-size:10px;font-weight:500;color:var(--text2)}
+    .ld{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 
-    /* ── LEGENDAS ── */
-    .legend { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 9px; font-size: 11px; }
-    .legend span { display: flex; align-items: center; gap: 4px; }
-    .ld { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+    /* ── Rule strip ── */
+    .rule-strip{background:var(--rule-bg);border:1px solid var(--rule-bdr);border-left:3px solid #004B24;border-radius:0 10px 10px 0;padding:11px 15px;font-size:11px;color:var(--text2);line-height:1.8}
+    .rule-strip strong{color:var(--text)}
 
-    /* ── REGRA STRIP ── */
-    .rule-strip {
-      border-radius: 0 6px 6px 0;
-      padding: 10px 14px;
-      margin-bottom: 18px;
-      font-size: 11px; line-height: 1.8;
-    }
+    /* ── Cross grid ── */
+    .cross-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .cross-cell{background:var(--surface);border:1px solid var(--border);border-top:2px solid;border-radius:12px;padding:12px 14px;transition:transform .18s}
+    .cross-cell:hover{transform:translateY(-1px)}
+    .cross-cell-title{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);margin-bottom:8px}
+    .cross-cell-val{font-size:20px;font-weight:700;line-height:1;margin-bottom:5px}
+    .badge{display:inline-block;padding:3px 9px;border-radius:5px;font-size:10px;font-weight:700;letter-spacing:.02em}
 
-    /* ── CRUZAMENTO ── */
-    .cross-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-bottom: 14px; }
-    .cross-cell { border-radius: 8px; padding: 11px 13px; border-top: 2px solid #ccc; }
-    .cross-cell-title { font-size: 10px; margin-bottom: 5px; }
-    .cross-cell-val   { font-size: 16px; font-weight: 700; display: flex; align-items: center; gap: 6px; }
-    .badge { display: inline-block; padding: 2px 7px; border-radius: 4px; font-size: 10px; font-weight: 700; }
-
-    /* ── RESPONSIVE ── */
-    @media (max-width: 680px) {
-      .grid-2, .cross-grid { grid-template-columns: 1fr; }
-      .kpi-row { grid-template-columns: repeat(2, 1fr); }
+    @media(max-width:720px){
+      .grid-2,.grid-3,.cross-grid{grid-template-columns:1fr}
+      .kpi-strip{grid-template-columns:repeat(2,1fr)}
+      .topbar-center{display:none}
+      .filter-chip{display:none}
     }
   </style>
 </head>
-<body>
+<body class="dark">
 
+<!-- ══════════════════════════════════════
+     TELA DE UPLOAD
+══════════════════════════════════════ -->
+<div id="upload-screen">
+  <div class="up-brand">
+    <div class="up-logo">B</div>
+    <div>
+      <div class="up-name" id="up-name"></div>
+      <div class="up-sub"  id="up-sub"></div>
+    </div>
+  </div>
+
+  <div class="drop-zone" id="dropZone">
+    <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" aria-label="Selecionar planilha"/>
+    <i class="ti ti-cloud-upload drop-icon" id="dz-icon" aria-hidden="true"></i>
+    <div class="drop-title">Arraste sua planilha aqui</div>
+    <div class="drop-sub">Solte o arquivo para carregar o painel<br>ou clique para selecionar</div>
+    <div class="ext-row">
+      <span class="ext-tag">.xlsx</span>
+      <span class="ext-tag">.xls</span>
+      <span class="ext-tag">.csv</span>
+    </div>
+  </div>
+
+  <div class="up-theme-row">
+    <i class="ti ti-sun" aria-hidden="true" style="font-size:14px;color:var(--text2)"></i>
+    <div class="theme-toggle" id="up-toggle" onclick="toggleTheme()" role="switch" aria-label="Alternar tema"></div>
+    <i class="ti ti-moon" aria-hidden="true" style="font-size:14px;color:var(--text2)"></i>
+    <span id="up-theme-lbl">Escuro</span>
+  </div>
+
+  <div class="up-footer">
+    <i class="ti ti-lock" aria-hidden="true"></i>Dados processados localmente &nbsp;·&nbsp; nenhuma informação enviada ao servidor
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     APP PRINCIPAL
+══════════════════════════════════════ -->
+<div id="app-screen">
+
+  <div class="topbar">
+    <div class="logo-mark" id="logo-mark"></div>
+    <div>
+      <div class="brand-name" id="brand-name"></div>
+      <div class="brand-sub"  id="brand-sub"></div>
+    </div>
+    <div class="topbar-center">
+      <div class="nav-pills">
+        <div class="nav-pill on" onclick="showTab('ce')" id="tab-ce">
+          <i class="ti ti-truck-delivery" aria-hidden="true"></i>Coletas &amp; Entregas
+        </div>
+        <div class="nav-pill" onclick="showTab('sm')" id="tab-sm">
+          <i class="ti ti-shield-check" aria-hidden="true"></i>SM — Monitoramento
+        </div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <i class="ti ti-sun theme-icon" id="theme-icon" aria-hidden="true"></i>
+      <div class="theme-toggle" id="app-toggle" onclick="toggleTheme()" role="switch" aria-label="Alternar tema"></div>
+      <div class="file-badge">
+        <i class="ti ti-file-spreadsheet" aria-hidden="true"></i>
+        <span id="file-badge-txt"></span>
+      </div>
+      <button class="btn-swap" onclick="trocarArquivo()" aria-label="Trocar arquivo">
+        <i class="ti ti-refresh" aria-hidden="true"></i>Trocar arquivo
+      </button>
+    </div>
+  </div>
+
+  <div class="filter-bar">
+    <div class="filter-group">
+      <span class="filter-label">Filial</span>
+      <select id="sel-filial" class="filter-select" onchange="aplicarFiltros()" aria-label="Filtrar por filial">
+        <option value="TODAS">Todas as filiais</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <span class="filter-label">Tipo</span>
+      <select id="sel-tipo" class="filter-select" onchange="aplicarFiltros()" aria-label="Filtrar por tipo">
+        <option value="TODOS">Coletas + Entregas</option>
+        <option value="COLETA">Somente coletas</option>
+        <option value="ENTREGA">Somente entregas</option>
+      </select>
+    </div>
+    <div class="filter-chip" id="filter-chip">
+      <i class="ti ti-adjustments-horizontal" aria-hidden="true"></i>
+      <span id="filter-chip-txt">Todas as filiais · Coletas + Entregas</span>
+    </div>
+  </div>
+
+  <div class="main">
+
+    <!-- ABA CE -->
+    <div class="tab-panel active" id="panel-ce">
+      <div class="kpi-strip" id="kpi-ce"></div>
+      <div class="sdiv">Análise de chegada &amp; saída</div>
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-map-pin" aria-hidden="true"></i>Classificação chegada</div>
+          </div>
+          <div class="legend" id="leg-classif" style="margin-bottom:10px"></div>
+          <div style="position:relative;height:185px"><canvas id="ch-classif" role="img" aria-label="Classificação de chegada"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-logout" aria-hidden="true"></i>Status de saída</div>
+          </div>
+          <div class="legend" id="leg-saida" style="margin-bottom:10px"></div>
+          <div style="position:relative;height:185px"><canvas id="ch-saida" role="img" aria-label="Status de saída"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-target" aria-hidden="true"></i>Tempo no alvo</div>
+          </div>
+          <div class="legend" id="leg-alvo" style="margin-bottom:10px"></div>
+          <div style="position:relative;height:185px"><canvas id="ch-alvo" role="img" aria-label="Finalização no alvo"></canvas></div>
+        </div>
+      </div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-truck" aria-hidden="true"></i>Vínculo do veículo</div>
+          </div>
+          <div class="legend" id="leg-vinculo" style="margin-bottom:10px"></div>
+          <div style="position:relative;height:165px"><canvas id="ch-vinculo" role="img" aria-label="Vínculo do veículo"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Coletas vs. entregas por filial</div>
+          </div>
+          <div style="position:relative;height:195px"><canvas id="ch-ce" role="img" aria-label="Coletas e entregas por filial"></canvas></div>
+        </div>
+      </div>
+      <div class="sdiv">Performance por filial</div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação completa por filial</div>
+          <div class="legend" id="leg-filial-ce"></div>
+        </div>
+        <div style="position:relative;height:300px"><canvas id="ch-filial-ce" role="img" aria-label="Classificação completa por filial"></canvas></div>
+      </div>
+    </div>
+
+    <!-- ABA SM -->
+    <div class="tab-panel" id="panel-sm">
+      <div class="rule-strip" id="rule-strip"></div>
+      <div class="kpi-strip" id="kpi-sm"></div>
+      <div class="sdiv">Distribuição &amp; polígono</div>
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-shield" aria-hidden="true"></i>Distribuição SM completa</div>
+          </div>
+          <div class="legend" id="leg-sm-dist" style="margin-bottom:10px"></div>
+          <div style="position:relative;height:200px"><canvas id="ch-sm-dist" role="img" aria-label="Distribuição SM"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <div class="card-title"><i class="ti ti-hexagon-letter-p" aria-hidden="true"></i>Polígono incorreto por filial</div>
+          </div>
+          <div style="position:relative;height:200px"><canvas id="ch-pol" role="img" aria-label="Polígono incorreto por filial"></canvas></div>
+        </div>
+      </div>
+      <div class="sdiv">Cruzamento de indicadores</div>
+      <div class="cross-grid" id="cards-cruzamento"></div>
+      <div class="sdiv">Análise por filial</div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação SM por filial</div>
+          <div class="legend" id="leg-filial-sm"></div>
+        </div>
+        <div style="position:relative;height:320px"><canvas id="ch-filial-sm" role="img" aria-label="SM por filial empilhado"></canvas></div>
+      </div>
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title"><i class="ti ti-percentage" aria-hidden="true"></i>Percentuais por filial</div>
+          <div class="legend">
+            <span><span class="ld" style="background:#00BFA5"></span>% No prazo</span>
+            <span><span class="ld" style="background:#7C83E0"></span>% Polígono incorreto</span>
+            <span><span class="ld" style="background:#FB8C00"></span>% Abertura FP</span>
+          </div>
+        </div>
+        <div style="position:relative;height:300px"><canvas id="ch-pct" role="img" aria-label="Percentuais por filial"></canvas></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════
+     SCRIPTS
+══════════════════════════════════════ -->
 <script>
-  // ── Aplicar cores da paleta via JS (lidas de dados.js) ──
-  document.body.style.background = CORES.fundoGeral;
-  document.body.style.color      = CORES.navTabActive;
-</script>
 
-<!-- TOP BAR -->
-<div class="topbar" id="topbar">
-  <div class="logo-box" id="logoBox"></div>
-  <div>
-    <div class="logo-text" id="logoText"></div>
-    <div class="logo-sub"  id="logoSub"></div>
-  </div>
-  <div class="topbar-right">
-    <div class="file-badge" id="fileBadge">
-      <i class="ti ti-file-spreadsheet" aria-hidden="true"></i>
-      <span id="fileBadgeText"></span>
-    </div>
-  </div>
-</div>
+// ─── Estado do tema ────────────────────────────────────────
+let isDark = true;
 
-<!-- NAVBAR -->
-<div class="navbar" id="navbar">
-  <div class="nav-tab active" onclick="showTab('ce')" id="tab-ce">
-    <i class="ti ti-truck-delivery" aria-hidden="true"></i> Coletas &amp; Entregas
-  </div>
-  <div class="nav-tab" onclick="showTab('sm')" id="tab-sm">
-    <i class="ti ti-shield-check" aria-hidden="true"></i> SM — Solicitações de monitoramento
-  </div>
-</div>
+function toggleTheme() {
+  isDark = !isDark;
+  document.body.classList.toggle('dark',  isDark);
+  document.body.classList.toggle('light', !isDark);
+  const icon = document.getElementById('theme-icon');
+  if (icon) icon.className = isDark ? 'ti ti-sun theme-icon' : 'ti ti-moon theme-icon';
+  const lbl = document.getElementById('up-theme-lbl');
+  if (lbl) lbl.textContent = isDark ? 'Escuro' : 'Claro';
+  if (document.getElementById('app-screen').style.display !== 'none') aplicarFiltros();
+}
 
-<!-- CONTEÚDO -->
-<div class="content">
+// ─── Helpers ───────────────────────────────────────────────
+const $ = id => document.getElementById(id);
+const fmt = n => n.toLocaleString('pt-BR');
+const pct = (a, b) => Math.round(a / (b || 1) * 100);
 
-  <!-- ═══ ABA 1 — COLETAS & ENTREGAS ═══ -->
-  <div class="tab-panel active" id="panel-ce">
+function mkLeg(elId, items) {
+  $(elId).innerHTML = items.map(([l, c]) =>
+    `<span><span class="ld" style="background:${c}"></span>${l}</span>`).join('');
+}
 
-    <div class="kpi-row" id="kpi-ce"></div>
+// ─── Dados ─────────────────────────────────────────────────
+function calcular(filial, tipo) {
+  const fils  = filial === 'TODAS' ? FILIAIS : [filial];
+  const tipos = tipo   === 'TODOS' ? ['COLETA','ENTREGA'] : [tipo];
+  let np=0, fp=0, afp=0, pol=0, can=0, col=0, ent=0;
+  const pf = {};
+  fils.forEach(f => {
+    pf[f] = { np:0, fp:0, afp:0, pol:0, can:0, col:0, ent:0 };
+    tipos.forEach(t => {
+      const d = DADOS_BRUTOS[f]?.[t]; if (!d) return;
+      np+=d.np; fp+=d.fp; afp+=d.afp; pol+=d.pol; can+=d.can; col+=d.col; ent+=d.ent;
+      pf[f].np+=d.np; pf[f].fp+=d.fp; pf[f].afp+=d.afp;
+      pf[f].pol+=d.pol; pf[f].can+=d.can; pf[f].col+=d.col; pf[f].ent+=d.ent;
+    });
+  });
+  return { np, fp, afp, pol, can, col, ent, pf, fils, total: np+fp+afp+pol+can || 1 };
+}
 
-    <div class="grid-2">
-      <div class="card" id="card-classificacao">
-        <div class="card-title"><i class="ti ti-map-pin" aria-hidden="true"></i>Classificação geral de chegada</div>
-        <div class="legend" id="leg-classificacao"></div>
-        <div style="position:relative;height:200px">
-          <canvas id="chart-classificacao" role="img" aria-label="Distribuição de classificação de chegada"></canvas>
-        </div>
-      </div>
-      <div class="card" id="card-saida">
-        <div class="card-title"><i class="ti ti-logout" aria-hidden="true"></i>Status de saída do local</div>
-        <div class="legend" id="leg-saida"></div>
-        <div style="position:relative;height:200px">
-          <canvas id="chart-saida" role="img" aria-label="Status de saída do local"></canvas>
-        </div>
-      </div>
-    </div>
+// ─── Gráficos ──────────────────────────────────────────────
+const CH = {};
 
-    <div class="grid-2">
-      <div class="card" id="card-alvo">
-        <div class="card-title"><i class="ti ti-target" aria-hidden="true"></i>Finalização (tempo no alvo)</div>
-        <div class="legend" id="leg-alvo"></div>
-        <div style="position:relative;height:180px">
-          <canvas id="chart-alvo" role="img" aria-label="Finalização no alvo"></canvas>
-        </div>
-      </div>
-      <div class="card" id="card-vinculo">
-        <div class="card-title"><i class="ti ti-truck" aria-hidden="true"></i>Vínculo do veículo</div>
-        <div class="legend" id="leg-vinculo"></div>
-        <div style="position:relative;height:180px">
-          <canvas id="chart-vinculo" role="img" aria-label="Vínculo do veículo"></canvas>
-        </div>
-      </div>
-    </div>
+function kill(id) { if (CH[id]) { CH[id].destroy(); delete CH[id]; } }
 
-    <div class="grid-full card" id="card-filial-ce">
-      <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação completa por filial</div>
-      <div class="legend" id="leg-filial-ce"></div>
-      <div style="position:relative;height:310px">
-        <canvas id="chart-filial-ce" role="img" aria-label="Classificação completa por filial empilhada"></canvas>
-      </div>
-    </div>
+function getCS() {
+  return {
+    grid:    isDark ? 'rgba(255,255,255,.04)' : 'rgba(0,0,0,.05)',
+    tick:    isDark ? '#2D6B3E' : '#4A6B53',
+    bdr:     isDark ? '#1E3328' : '#D8E2DA',
+    ttBg:    isDark ? '#111D15' : '#FFFFFF',
+    ttBdr:   isDark ? '#1E3328' : '#D8E2DA',
+    ttTitle: isDark ? '#8DBD9A' : '#0F2318',
+    ttBody:  isDark ? '#6B9A78' : '#4A6B53',
+    dot:     isDark ? '#0D1A11' : '#FFFFFF',
+  };
+}
 
-    <div class="grid-full card" id="card-ce2" style="margin-top:14px">
-      <div class="card-title"><i class="ti ti-chart-bar" aria-hidden="true"></i>Coletas vs. entregas por filial</div>
-      <div class="legend">
-        <span><span class="ld" id="ld-coletas"></span><span id="label-coletas">Coletas</span></span>
-        <span><span class="ld" id="ld-entregas"></span><span id="label-entregas">Entregas</span></span>
-      </div>
-      <div style="position:relative;height:250px">
-        <canvas id="chart-coletas-entregas" role="img" aria-label="Coletas e entregas por filial"></canvas>
-      </div>
-    </div>
+function ttOpts(cs) {
+  return { backgroundColor:cs.ttBg, borderColor:cs.ttBdr, borderWidth:1, titleColor:cs.ttTitle, bodyColor:cs.ttBody };
+}
 
-  </div>
+function scOpts(cs, stacked) {
+  const base = { grid:{ color:cs.grid }, ticks:{ font:{ size:9, family:'Inter,system-ui' }, color:cs.tick }, border:{ color:cs.bdr } };
+  return stacked ? { ...base, stacked:true } : base;
+}
 
-  <!-- ═══ ABA 2 — SM ═══ -->
-  <div class="tab-panel" id="panel-sm">
-
-    <div class="rule-strip" id="rule-strip"></div>
-
-    <div class="kpi-row" id="kpi-sm"></div>
-
-    <div class="grid-2">
-      <div class="card" id="card-sm-dist">
-        <div class="card-title"><i class="ti ti-shield" aria-hidden="true"></i>Distribuição completa</div>
-        <div class="legend" id="leg-sm-dist"></div>
-        <div style="position:relative;height:210px">
-          <canvas id="chart-sm-dist" role="img" aria-label="Distribuição SM completa"></canvas>
-        </div>
-      </div>
-      <div class="card" id="card-poligono">
-        <div class="card-title"><i class="ti ti-hexagon-letter-p" aria-hidden="true"></i>Polígono incorreto por filial</div>
-        <div style="position:relative;height:210px">
-          <canvas id="chart-poligono" role="img" aria-label="Polígono incorreto por filial"></canvas>
-        </div>
-      </div>
-    </div>
-
-    <div class="cross-grid" id="cards-cruzamento"></div>
-
-    <div class="grid-full card" id="card-filial-sm">
-      <div class="card-title"><i class="ti ti-building-factory" aria-hidden="true"></i>Classificação SM completa por filial</div>
-      <div class="legend" id="leg-filial-sm"></div>
-      <div style="position:relative;height:330px">
-        <canvas id="chart-filial-sm" role="img" aria-label="Classificação SM por filial empilhada"></canvas>
-      </div>
-    </div>
-
-    <div class="grid-full card" id="card-pct" style="margin-top:14px">
-      <div class="card-title"><i class="ti ti-percentage" aria-hidden="true"></i>% no prazo · % polígono incorreto · % abertura FP por filial</div>
-      <div class="legend">
-        <span><span class="ld" id="ld-pct-np"></span>% No prazo</span>
-        <span><span class="ld" id="ld-pct-pol"></span>% Polígono incorreto</span>
-        <span><span class="ld" id="ld-pct-afp"></span>% Abertura fora do prazo</span>
-      </div>
-      <div style="position:relative;height:310px">
-        <canvas id="chart-pct-filial" role="img" aria-label="Percentuais por filial"></canvas>
-      </div>
-    </div>
-
-  </div>
-</div>
-
-<!-- ═══ SCRIPTS DE RENDERIZAÇÃO ═══ -->
-<script>
-
-// ── Navegação ──────────────────────────────────────────────
-function showTab(t) {
-  ["ce", "sm"].forEach(id => {
-    document.getElementById("panel-" + id).classList.toggle("active", id === t);
-    document.getElementById("tab-" + id).classList.toggle("active", id === t);
+function donut(id, data, colors) {
+  const cs = getCS(); kill(id);
+  CH[id] = new Chart($(id), {
+    type: 'doughnut',
+    data: { datasets: [{ data, backgroundColor: colors, borderWidth: 3, borderColor: cs.dot, hoverBorderColor: cs.dot }] },
+    options: { responsive:true, maintainAspectRatio:false, cutout:'68%',
+      plugins: { legend:{ display:false }, tooltip:{ ...ttOpts(cs), callbacks:{ label: c => ` ${c.label}: ${c.parsed.toLocaleString('pt-BR')}` } } } }
   });
 }
-
-// ── Helpers ────────────────────────────────────────────────
-function applyStyle(el, styles) {
-  Object.assign(el.style, styles);
-}
-
-function legend(elId, items) {
-  document.getElementById(elId).innerHTML = items
-    .map(([l, c]) => `<span><span class="ld" style="background:${c}"></span>${l}</span>`)
-    .join("");
-}
-
-function donut(id, data, colors, bg) {
-  new Chart(document.getElementById(id), {
-    type: "doughnut",
-    data: { datasets: [{ data, backgroundColor: colors, borderWidth: 2, borderColor: bg || CORES.fundoGeral }] },
-    options: {
-      responsive: true, maintainAspectRatio: false, cutout: "62%",
-      plugins: {
-        legend: { display: false },
-        tooltip: { callbacks: { label: c => ` ${c.label}: ${c.parsed.toLocaleString("pt-BR")}` } },
-      },
-    },
-  });
-}
-
-const TICK = () => ({ font: { size: 10 }, color: CORES.navTabInativo });
 
 function hbarStacked(id, labels, datasets) {
-  new Chart(document.getElementById(id), {
-    type: "bar", data: { labels, datasets },
-    options: {
-      indexAxis: "y", responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { stacked: true, min: 0, grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
-        y: { stacked: true, ticks: TICK() },
-      },
-    },
+  const cs = getCS(); kill(id);
+  CH[id] = new Chart($(id), {
+    type: 'bar', data: { labels, datasets },
+    options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{ display:false }, tooltip: ttOpts(cs) },
+      scales: { x: { ...scOpts(cs,true), min:0 }, y: scOpts(cs,true) } }
   });
 }
 
 function hbarSimples(id, labels, data, cor) {
-  new Chart(document.getElementById(id), {
-    type: "bar",
-    data: { labels, datasets: [{ data, backgroundColor: cor, borderRadius: 4 }] },
-    options: {
-      indexAxis: "y", responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { min: 0, grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
-        y: { ticks: TICK() },
-      },
-    },
+  const cs = getCS(); kill(id);
+  CH[id] = new Chart($(id), {
+    type: 'bar', data: { labels, datasets: [{ data, backgroundColor: cor, borderRadius: 4, borderSkipped: false }] },
+    options: { indexAxis:'y', responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{ display:false }, tooltip: ttOpts(cs) },
+      scales: { x: { ...scOpts(cs), min:0 }, y: scOpts(cs) } }
   });
 }
 
 function barAgrupada(id, labels, datasets) {
-  new Chart(document.getElementById(id), {
-    type: "bar", data: { labels, datasets },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: {
-        x: { ticks: { ...TICK(), maxRotation: 30, autoSkip: false } },
-        y: { grid: { color: "rgba(0,0,0,0.04)" }, ticks: TICK() },
-      },
-    },
+  const cs = getCS(); kill(id);
+  CH[id] = new Chart($(id), {
+    type: 'bar', data: { labels, datasets },
+    options: { responsive:true, maintainAspectRatio:false,
+      plugins: { legend:{ display:false }, tooltip: ttOpts(cs) },
+      scales: { x: { ...scOpts(cs), ticks: { ...scOpts(cs).ticks, maxRotation:30, autoSkip:false } }, y: scOpts(cs) } }
   });
 }
 
-// ── Aplicar cores estruturais ─────────────────────────────
-const topbar = document.getElementById("topbar");
-applyStyle(topbar, { background: CORES.topbarBg });
+// ─── Render ────────────────────────────────────────────────
+function aplicarFiltros() {
+  const filial = $('sel-filial').value;
+  const tipo   = $('sel-tipo').value;
 
-const navbar = document.getElementById("navbar");
-applyStyle(navbar, { borderBottom: `2px solid ${CORES.navbarBorder}` });
+  const ativo = filial !== 'TODAS' || tipo !== 'TODOS';
+  const chip  = $('filter-chip');
+  $('filter-chip-txt').textContent =
+    (filial !== 'TODAS' ? filial : 'Todas as filiais') + ' · ' +
+    (tipo === 'TODOS' ? 'Coletas + Entregas' : tipo === 'COLETA' ? 'Somente coletas' : 'Somente entregas');
+  chip.classList.toggle('lit', ativo);
 
-["ce","sm"].forEach(id => {
-  const t = document.getElementById("tab-" + id);
-  applyStyle(t, { color: CORES.navTabInativo });
-  t.addEventListener("click", () => {
-    ["ce","sm"].forEach(x => {
-      const el = document.getElementById("tab-" + x);
-      const isActive = x === id;
-      el.style.color       = isActive ? CORES.navTabActive : CORES.navTabInativo;
-      el.style.borderBottom = isActive ? `3px solid ${CORES.navTabLine}` : "3px solid transparent";
+  const d = calcular(filial, tipo);
+  const T = d.total;
+  const P = CORES;
+
+  // ── KPIs ──
+  const kDefs = [
+    { k:'np',  ic:'ti-circle-check',   l:'No prazo',          v:fmt(d.np),  s:`${pct(d.np,T)}% do total`,    c:P.noPrazo,           bw:pct(d.np,T) },
+    { k:'fp',  ic:'ti-alert-circle',   l:'Fora do prazo',     v:fmt(d.fp),  s:`${pct(d.fp,T)}% do total`,    c:P.foraDoPrazo,       bw:pct(d.fp,T) },
+    { k:'afp', ic:'ti-clock-x',        l:'Abertura FP',       v:fmt(d.afp), s:`${pct(d.afp,T)}% — SM tarde`, c:P.aberturaForaPrazo, bw:pct(d.afp,T) },
+    { k:'pol', ic:'ti-map-search',     l:'Polígono incor.',   v:fmt(d.pol), s:`${pct(d.pol,T)}% do total`,   c:P.poligonoIncorreto, bw:pct(d.pol,T) },
+    { k:'can', ic:'ti-ban',            l:'Canceladas',        v:fmt(d.can), s:`${pct(d.can,T)}% do total`,   c:P.cancelada,         bw:pct(d.can,T) },
+    { k:'col', ic:'ti-package-import', l:'Coletas',           v:fmt(d.col), s:'registros',                   c:P.coletas,           bw:Math.min(100,Math.round(d.col/200)) },
+    { k:'ent', ic:'ti-package-export', l:'Entregas',          v:fmt(d.ent), s:'registros',                   c:P.entregas,          bw:Math.min(100,Math.round(d.ent/200)) },
+    { k:'tot', ic:'ti-sum',            l:'Total',             v:fmt(T),     s:'período selecionado',         c:P.topbarBg,          bw:100 },
+  ];
+
+  const kHtml = defs => defs.map(k => `
+    <div class="kpi-card ${k.k}">
+      <i class="ti ${k.ic} kpi-icon" aria-hidden="true" style="color:${k.c}"></i>
+      <div class="kpi-label">${k.l}</div>
+      <div class="kpi-val" style="color:${k.c}">${k.v}</div>
+      <div class="kpi-sub">${k.s}</div>
+      <div class="kpi-bar"><div class="kpi-bar-fill" style="width:${k.bw}%;background:${k.c}"></div></div>
+    </div>`).join('');
+
+  $('kpi-ce').innerHTML = kHtml(kDefs);
+  $('kpi-sm').innerHTML = kHtml(kDefs.slice(0, 6));
+
+  // ── Donuts ──
+  const CC = [P.foraDoPrazo, P.noPrazo, P.aberturaForaPrazo, P.poligonoIncorreto, P.cancelada];
+
+  mkLeg('leg-classif', [
+    [`Fora do prazo ${pct(d.fp,T)}%`, P.foraDoPrazo],
+    [`No prazo ${pct(d.np,T)}%`,      P.noPrazo],
+    [`Abertura FP ${pct(d.afp,T)}%`,  P.aberturaForaPrazo],
+    [`Polígono ${pct(d.pol,T)}%`,     P.poligonoIncorreto],
+    [`Cancelada ${pct(d.can,T)}%`,    P.cancelada],
+  ]);
+  donut('ch-classif', [d.fp, d.np, d.afp, d.pol, d.can], CC);
+
+  mkLeg('leg-saida', [
+    [`No prazo ${DONUT_SAIDA.pcts[0]}`,     P.noPrazo],
+    [`Fora do prazo ${DONUT_SAIDA.pcts[1]}`,P.foraDoPrazo],
+    [`Não registrado ${DONUT_SAIDA.pcts[2]}`,P.saidaNR],
+    [`Não iniciada ${DONUT_SAIDA.pcts[3]}`,  P.saidaNI],
+  ]);
+  donut('ch-saida', DONUT_SAIDA.data, [P.noPrazo, P.foraDoPrazo, P.saidaNR, P.saidaNI]);
+
+  mkLeg('leg-alvo', [
+    [`Dentro ${DONUT_ALVO.pcts[0]}`, P.dentroAlvo],
+    [`Fora ${DONUT_ALVO.pcts[1]}`,   P.foraAlvo],
+  ]);
+  donut('ch-alvo', DONUT_ALVO.data, [P.dentroAlvo, P.foraAlvo]);
+
+  mkLeg('leg-vinculo', [
+    [`Agregado ${DONUT_VINCULO.pcts[0]}`, P.agregado],
+    [`Terceiro ${DONUT_VINCULO.pcts[1]}`, P.terceiro],
+    [`Frota ${DONUT_VINCULO.pcts[2]}`,    P.frota],
+  ]);
+  donut('ch-vinculo', DONUT_VINCULO.data, [P.agregado, P.terceiro, P.frota]);
+
+  mkLeg('leg-sm-dist', [
+    [`Fora do prazo ${pct(d.fp,T)}%`, P.foraDoPrazo],
+    [`No prazo ${pct(d.np,T)}%`,      P.noPrazo],
+    [`Abertura FP ${pct(d.afp,T)}%`,  P.aberturaForaPrazo],
+    [`Polígono ${pct(d.pol,T)}%`,     P.poligonoIncorreto],
+  ]);
+  donut('ch-sm-dist', [d.fp, d.np, d.afp, d.pol, d.can], CC);
+
+  // ── Filiais ──
+  const fl  = d.fils;
+  const LEG = [
+    ['No prazo',           P.noPrazo],
+    ['Fora do prazo',      P.foraDoPrazo],
+    ['Abertura FP',        P.aberturaForaPrazo],
+    ['Polígono incorreto', P.poligonoIncorreto],
+    ['Cancelada',          P.cancelada],
+  ];
+  mkLeg('leg-filial-ce', LEG);
+  mkLeg('leg-filial-sm', LEG);
+
+  const DS = [
+    { label:'NP',  data:fl.map(f=>d.pf[f].np),  backgroundColor:P.noPrazo,           borderRadius:2 },
+    { label:'FP',  data:fl.map(f=>d.pf[f].fp),  backgroundColor:P.foraDoPrazo,       borderRadius:2 },
+    { label:'AFP', data:fl.map(f=>d.pf[f].afp), backgroundColor:P.aberturaForaPrazo, borderRadius:2 },
+    { label:'POL', data:fl.map(f=>d.pf[f].pol), backgroundColor:P.poligonoIncorreto, borderRadius:2 },
+    { label:'CAN', data:fl.map(f=>d.pf[f].can), backgroundColor:P.cancelada,         borderRadius:2 },
+  ];
+  hbarStacked('ch-filial-ce', fl, DS);
+  hbarStacked('ch-filial-sm', fl, DS);
+
+  barAgrupada('ch-ce', fl, [
+    { label:'Col', data:fl.map(f=>d.pf[f].col), backgroundColor:P.coletas,  borderRadius:3, borderSkipped:false },
+    { label:'Ent', data:fl.map(f=>d.pf[f].ent), backgroundColor:P.entregas, borderRadius:3, borderSkipped:false },
+  ]);
+
+  hbarSimples('ch-pol', fl, fl.map(f=>d.pf[f].pol), P.poligonoIncorreto);
+
+  const tots = fl.map(f => d.pf[f].np+d.pf[f].fp+d.pf[f].afp+d.pf[f].pol+d.pf[f].can || 1);
+  barAgrupada('ch-pct', fl, [
+    { label:'%NP',  data:fl.map((f,i)=>Math.round(d.pf[f].np/tots[i]*100)),  backgroundColor:P.noPrazo,           borderRadius:3, borderSkipped:false },
+    { label:'%POL', data:fl.map((f,i)=>Math.round(d.pf[f].pol/tots[i]*100)), backgroundColor:P.poligonoIncorreto, borderRadius:3, borderSkipped:false },
+    { label:'%AFP', data:fl.map((f,i)=>Math.round(d.pf[f].afp/tots[i]*100)), backgroundColor:P.aberturaForaPrazo, borderRadius:3, borderSkipped:false },
+  ]);
+
+  // ── Cards cruzamento ──
+  $('cards-cruzamento').innerHTML = [
+    { t:'No prazo',               v:fmt(d.np),  p:`${pct(d.np,T)}%`,  bc:P.noPrazo,           vc:P.noPrazo,           bb:isDark?'rgba(0,191,165,.12)':'#D6F5F0',       bt:isDark?'#00BFA5':'#005E52' },
+    { t:'Fora do prazo',          v:fmt(d.fp),  p:`${pct(d.fp,T)}%`,  bc:P.foraDoPrazo,       vc:P.foraDoPrazo,       bb:isDark?'rgba(239,83,80,.12)':'#FDE8E8',        bt:isDark?'#EF5350':'#7B0000' },
+    { t:'Abertura fora do prazo', v:fmt(d.afp), p:`${pct(d.afp,T)}%`, bc:P.aberturaForaPrazo, vc:P.aberturaForaPrazo, bb:isDark?'rgba(251,140,0,.12)':'#FEF3E0',        bt:isDark?'#FB8C00':'#7A3E00' },
+    { t:'Polígono incorreto',     v:fmt(d.pol), p:`${pct(d.pol,T)}%`, bc:P.poligonoIncorreto, vc:P.poligonoIncorreto, bb:isDark?'rgba(124,131,224,.12)':'#ECEEFE',      bt:isDark?'#7C83E0':'#2C3483' },
+  ].map(c => `
+    <div class="cross-cell" style="border-top-color:${c.bc}">
+      <div class="cross-cell-title">${c.t}</div>
+      <div class="cross-cell-val" style="color:${c.vc}">${c.v}</div>
+      <span class="badge" style="background:${c.bb};color:${c.bt}">${c.p}</span>
+    </div>`).join('');
+
+  // ── Rule strip ──
+  $('rule-strip').innerHTML = `
+    <strong>Regra de classificação:</strong><br>
+    <span style="color:${P.noPrazo};font-weight:600">No prazo</span> = SM ≥ 2h antes + chegada NO PRAZO &nbsp;|&nbsp;
+    <span style="color:${P.foraDoPrazo};font-weight:600">Fora do prazo</span> = SM &lt; 2h + chegada FP ou NP<br>
+    <span style="color:${P.aberturaForaPrazo};font-weight:600">Abertura fora do prazo</span> = SM FP + chegada NÃO REGISTRADO &nbsp;|&nbsp;
+    <span style="color:${P.poligonoIncorreto};font-weight:600">Polígono incorreto</span> = SM NP + chegada NÃO REGISTRADO`;
+}
+
+// ─── Navegação ─────────────────────────────────────────────
+function showTab(t) {
+  ['ce','sm'].forEach(id => {
+    $('panel-' + id).classList.toggle('active', id === t);
+    $('tab-' + id).classList.toggle('on', id === t);
+  });
+}
+
+// ─── Upload ────────────────────────────────────────────────
+function handleFile(file) {
+  if (!file) return;
+  $('file-badge-txt').textContent = file.name + '  ·  ' + CONFIG.totalRegistros + ' registros';
+  launchApp();
+}
+
+function launchApp() {
+  $('upload-screen').style.display = 'none';
+  $('app-screen').style.display    = 'flex';
+
+  // Preencher select de filiais (só na primeira vez)
+  const sel = $('sel-filial');
+  if (sel.options.length === 1) {
+    FILIAIS.forEach(f => {
+      const o = document.createElement('option');
+      o.value = f; o.textContent = f;
+      sel.appendChild(o);
     });
-  });
-});
-document.getElementById("tab-ce").style.borderBottom = `3px solid ${CORES.navTabLine}`;
-document.getElementById("tab-ce").style.color = CORES.navTabActive;
-
-// Logo box
-const logoBox = document.getElementById("logoBox");
-applyStyle(logoBox, { background: CORES.topbarAccent });
-logoBox.textContent = CONFIG.empresa[0];
-
-document.getElementById("logoText").textContent = CONFIG.empresa;
-applyStyle(document.getElementById("logoSub"), { color: CORES.topbarSub });
-document.getElementById("logoSub").textContent  = CONFIG.subtitulo;
-
-// File badge
-const fb = document.getElementById("fileBadge");
-applyStyle(fb, { background: CORES.badgeBg, border: `0.5px solid ${CORES.badgeBorder}`, color: CORES.badgeText });
-fb.querySelector("i").style.color = CORES.topbarSub;
-document.getElementById("fileBadgeText").textContent = CONFIG.arquivo + " · " + CONFIG.totalRegistros + " registros";
-
-// Cards — border e card-title
-document.querySelectorAll(".card").forEach(c => {
-  c.style.border = `0.5px solid ${CORES.cardBorder}`;
-});
-document.querySelectorAll(".card-title").forEach(t => {
-  t.style.color = CORES.navTabInativo;
-  const icon = t.querySelector("i");
-  if (icon) icon.style.color = CORES.noPrazo;
-});
-document.querySelectorAll(".kpi-label").forEach(l => l.style.color = CORES.navTabInativo);
-document.querySelectorAll(".kpi-sub").forEach(l => l.style.color = CORES.topbarSub);
-document.querySelectorAll(".legend").forEach(l => l.style.color = CORES.navTabActive);
-document.querySelectorAll(".cross-cell").forEach(c => {
-  c.style.background = CORES.crossCellBg;
-  c.style.border = `0.5px solid ${CORES.cardBorder}`;
-});
-document.querySelectorAll(".cross-cell-title").forEach(t => t.style.color = CORES.navTabInativo);
-
-// ── Rule strip ────────────────────────────────────────────
-const rs = document.getElementById("rule-strip");
-applyStyle(rs, {
-  background:  CORES.ruleBg,
-  borderLeft:  `3px solid ${CORES.ruleBorder}`,
-  color:       CORES.navTabActive,
-});
-rs.innerHTML = `
-  <strong style="color:${CORES.topbarBg}">Regra de classificação:</strong><br>
-  <span style="color:${CORES.noPrazo};font-weight:700">No prazo</span> = ${REGRAS.descricao.noPrazo} &nbsp;|&nbsp;
-  <span style="color:${CORES.foraDoPrazo};font-weight:700">Fora do prazo</span> = ${REGRAS.descricao.foraDoPrazo}<br>
-  <span style="color:${CORES.aberturaForaPrazo};font-weight:700">Abertura fora do prazo</span> = ${REGRAS.descricao.aberturaForaPrazo} &nbsp;|&nbsp;
-  <span style="color:${CORES.poligonoIncorreto};font-weight:700">Polígono incorreto</span> = ${REGRAS.descricao.poligonoIncorreto}
-`;
-
-// ── KPIs ──────────────────────────────────────────────────
-const COR_MAP = {
-  blue:   CORES.kpiBlue,
-  green:  CORES.kpiGreen,
-  red:    CORES.kpiRed,
-  amber:  CORES.kpiAmber,
-  purple: CORES.kpiPurple,
-  gray:   CORES.kpiGray,
-  teal:   "#4B99A6",
-};
-
-function renderKPIs(elId, kpis) {
-  document.getElementById(elId).innerHTML = kpis.map(k => `
-    <div class="kpi" style="border:0.5px solid ${CORES.cardBorder};border-left:4px solid ${k.borderColor}">
-      <div class="kpi-label" style="color:${CORES.navTabInativo}">${k.label}</div>
-      <div class="kpi-val" style="color:${COR_MAP[k.cor] || CORES.navTabActive}">${k.valor}</div>
-      <div class="kpi-sub" style="color:${CORES.topbarSub}">${k.sub}</div>
-    </div>`).join("");
+  }
+  aplicarFiltros();
 }
-renderKPIs("kpi-ce", KPI_CE);
-renderKPIs("kpi-sm", KPI_SM);
 
-// ── Cards de cruzamento ───────────────────────────────────
-document.getElementById("cards-cruzamento").innerHTML = CARDS_CRUZAMENTO.map(c => `
-  <div class="cross-cell" style="background:${CORES.crossCellBg};border:0.5px solid ${CORES.cardBorder};border-top:2px solid ${c.borderColor}">
-    <div class="cross-cell-title" style="color:${CORES.navTabInativo}">${c.titulo}</div>
-    <div class="cross-cell-val" style="color:${c.corValor}">
-      ${c.valor}
-      <span class="badge" style="background:${c.corBadgeBg};color:${c.corBadgeText}">${c.pct}</span>
-    </div>
-  </div>`).join("");
+function trocarArquivo() {
+  $('upload-screen').style.display = 'flex';
+  $('app-screen').style.display    = 'none';
+  $('fileInput').value = '';
+}
 
-// ── Legendas coletas/entregas ─────────────────────────────
-document.getElementById("ld-coletas").style.background  = CORES.coletas;
-document.getElementById("ld-entregas").style.background = CORES.entregas;
-document.getElementById("ld-pct-np").style.background   = CORES.noPrazo;
-document.getElementById("ld-pct-pol").style.background  = CORES.poligonoIncorreto;
-document.getElementById("ld-pct-afp").style.background  = CORES.aberturaForaPrazo;
+// ─── Drag & drop ───────────────────────────────────────────
+const dz = $('dropZone');
+dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop',      e => { e.preventDefault(); dz.classList.remove('over'); handleFile(e.dataTransfer.files[0]); });
+$('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
 
-// ── Donuts ────────────────────────────────────────────────
-const CORES_CLASSIF = [CORES.foraDoPrazo, CORES.noPrazo, CORES.aberturaForaPrazo, CORES.poligonoIncorreto, CORES.cancelada];
-
-legend("leg-classificacao", DONUT_CLASSIFICACAO.labels.map((l, i) => [`${l} ${DONUT_CLASSIFICACAO.pcts[i]}`, CORES_CLASSIF[i]]));
-donut("chart-classificacao", DONUT_CLASSIFICACAO.data, CORES_CLASSIF);
-
-const CORES_SAIDA = [CORES.noPrazo, CORES.foraDoPrazo, CORES.saidaNR, CORES.saidaNI];
-legend("leg-saida", DONUT_SAIDA.labels.map((l, i) => [`${l} ${DONUT_SAIDA.pcts[i]}`, CORES_SAIDA[i]]));
-donut("chart-saida", DONUT_SAIDA.data, CORES_SAIDA);
-
-const CORES_ALVO = [CORES.dentroAlvo, CORES.foraAlvo];
-legend("leg-alvo", DONUT_ALVO.labels.map((l, i) => [`${l} ${DONUT_ALVO.pcts[i]}`, CORES_ALVO[i]]));
-donut("chart-alvo", DONUT_ALVO.data, CORES_ALVO);
-
-const CORES_VINC = [CORES.agregado, CORES.terceiro, CORES.frota];
-legend("leg-vinculo", DONUT_VINCULO.labels.map((l, i) => [`${l} ${DONUT_VINCULO.pcts[i]}`, CORES_VINC[i]]));
-donut("chart-vinculo", DONUT_VINCULO.data, CORES_VINC);
-
-legend("leg-sm-dist", DONUT_CLASSIFICACAO.labels.map((l, i) => [`${l} ${DONUT_CLASSIFICACAO.pcts[i]}`, CORES_CLASSIF[i]]));
-donut("chart-sm-dist", DONUT_CLASSIFICACAO.data, CORES_CLASSIF);
-
-// ── Datasets filial ───────────────────────────────────────
-const LEG_FILIAL = [
-  ["No prazo",           CORES.noPrazo],
-  ["Fora do prazo",      CORES.foraDoPrazo],
-  ["Abertura FP",        CORES.aberturaForaPrazo],
-  ["Polígono incorreto", CORES.poligonoIncorreto],
-  ["Cancelada",          CORES.cancelada],
-];
-legend("leg-filial-ce", LEG_FILIAL);
-legend("leg-filial-sm", LEG_FILIAL);
-
-const DS_FILIAL = [
-  { label: "No prazo",           data: FILIAL_DADOS.noPrazo,           backgroundColor: CORES.noPrazo,           borderRadius: 2 },
-  { label: "Fora do prazo",      data: FILIAL_DADOS.foraDoPrazo,       backgroundColor: CORES.foraDoPrazo,       borderRadius: 2 },
-  { label: "Abertura FP",        data: FILIAL_DADOS.aberturaForaPrazo, backgroundColor: CORES.aberturaForaPrazo, borderRadius: 2 },
-  { label: "Polígono incorreto", data: FILIAL_DADOS.poligonoIncorreto, backgroundColor: CORES.poligonoIncorreto, borderRadius: 2 },
-  { label: "Cancelada",          data: FILIAL_DADOS.cancelada,         backgroundColor: CORES.cancelada,         borderRadius: 2 },
-];
-
-hbarStacked("chart-filial-ce", FILIAIS, DS_FILIAL);
-hbarStacked("chart-filial-sm", FILIAIS, DS_FILIAL);
-
-// ── Coletas vs Entregas ───────────────────────────────────
-barAgrupada("chart-coletas-entregas", FILIAIS, [
-  { label: "Coletas",  data: FILIAL_DADOS.coletas,  backgroundColor: CORES.coletas,  borderRadius: 3 },
-  { label: "Entregas", data: FILIAL_DADOS.entregas, backgroundColor: CORES.entregas, borderRadius: 3 },
-]);
-
-// ── Polígono incorreto ────────────────────────────────────
-hbarSimples("chart-poligono", FILIAIS, FILIAL_DADOS.poligonoIncorreto, CORES.poligonoIncorreto);
-
-// ── % por filial ──────────────────────────────────────────
-const totais = FILIAIS.map((_, i) =>
-  FILIAL_DADOS.noPrazo[i] + FILIAL_DADOS.foraDoPrazo[i] +
-  FILIAL_DADOS.aberturaForaPrazo[i] + FILIAL_DADOS.poligonoIncorreto[i] + FILIAL_DADOS.cancelada[i]
-);
-barAgrupada("chart-pct-filial", FILIAIS, [
-  { label: "% No prazo",    data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.noPrazo[i]           / totais[i] * 100)), backgroundColor: CORES.noPrazo,           borderRadius: 3 },
-  { label: "% Polígono",    data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.poligonoIncorreto[i] / totais[i] * 100)), backgroundColor: CORES.poligonoIncorreto, borderRadius: 3 },
-  { label: "% Abertura FP", data: FILIAIS.map((_, i) => Math.round(FILIAL_DADOS.aberturaForaPrazo[i] / totais[i] * 100)), backgroundColor: CORES.aberturaForaPrazo, borderRadius: 3 },
-]);
-
+// ─── Init ──────────────────────────────────────────────────
+$('up-name').textContent    = CONFIG.empresa;
+$('up-sub').textContent     = CONFIG.subtitulo;
+$('logo-mark').textContent  = CONFIG.empresa[0];
+$('brand-name').textContent = CONFIG.empresa;
+$('brand-sub').textContent  = CONFIG.subtitulo;
 </script>
 </body>
 </html>
