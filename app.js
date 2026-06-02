@@ -337,8 +337,8 @@ function launchApp() {
       sel.appendChild(o);
     });
   }
-  document.addEventListener('DOMContentLoaded', () => re());
-  if (document.readyState !== 'loading') re();
+  // Chamar re() diretamente — DOM já está pronto quando launchApp é chamado
+  re();
 }
 
 function trocarArquivo() {
@@ -351,26 +351,44 @@ function trocarArquivo() {
 }
 
 // Init upload events
-(function initUpload() {
+// Inicializar tudo quando o DOM estiver pronto
+document.addEventListener('DOMContentLoaded', function () {
+
+  // ── Eventos de upload / drag-drop ────────────────────────
   const dz = document.getElementById('dropZone');
   const fi = document.getElementById('fileInput');
-  if (!dz || !fi) return;
 
-  dz.addEventListener('dragover', e => {
-    e.preventDefault();
-    dz.classList.add('over');
-  });
-  dz.addEventListener('dragleave', () => dz.classList.remove('over'));
-  dz.addEventListener('drop', e => {
-    e.preventDefault();
-    dz.classList.remove('over');
-    handleFile(e.dataTransfer.files[0]);
-  });
-  fi.addEventListener('change', e => handleFile(e.target.files[0]));
+  if (dz && fi) {
+    dz.addEventListener('dragover', e => {
+      e.preventDefault();
+      dz.classList.add('over');
+      dz.style.borderColor = '#004B24';
+      dz.style.background  = 'var(--surf2)';
+    });
+    dz.addEventListener('dragleave', () => {
+      dz.classList.remove('over');
+      dz.style.borderColor = '';
+      dz.style.background  = '';
+    });
+    dz.addEventListener('drop', e => {
+      e.preventDefault();
+      dz.classList.remove('over');
+      dz.style.borderColor = '';
+      dz.style.background  = '';
+      if (e.dataTransfer.files[0]) handleFile(e.dataTransfer.files[0]);
+    });
+    fi.addEventListener('change', e => {
+      if (e.target.files[0]) handleFile(e.target.files[0]);
+    });
+  }
 
-  // Preencher brand no upload screen
+  // ── Preencher brand na tela de upload ────────────────────
   const upName = document.getElementById('up-name');
   const upSub  = document.getElementById('up-sub');
   if (upName) upName.textContent = CONFIG.empresa;
   if (upSub)  upSub.textContent  = CONFIG.subtitulo;
-})();
+
+  // ── Evento trocar arquivo ─────────────────────────────────
+  const btnTroca = document.getElementById('btn-trocar');
+  if (btnTroca) btnTroca.addEventListener('click', trocarArquivo);
+});
