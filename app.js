@@ -17,7 +17,7 @@ function tg(){
 
 // ── Navegação ─────────────────────────────────────────────
 function showTab(t){
-  ['ce','sm'].forEach(id=>{
+  ['ce','sm','perm'].forEach(id=>{
     document.getElementById('p-'+id).classList.toggle('on',id===t);
     document.getElementById('tp-'+id).classList.toggle('on',id===t);
   });
@@ -124,7 +124,7 @@ function re(){
     {k:'ent', ic:'ti-package-export',l:'Entregas',     v:fmt(d.ent), s:'registros',                 c:P.entregas,    w:Math.min(100,Math.round(d.ent/200))},
     {k:'alvo',ic:'ti-target',        l:'Dentro do alvo',v:fmt(13694),s:'81,8% das viagens',         c:P.dentroAlvo,  w:82},
     {k:'saida',ic:'ti-logout',       l:'Saída no prazo',v:fmt(8069), s:'46,6% das saídas',          c:'#AB47BC',     w:47},
-    {k:'tot', ic:'ti-sum',           l:'Total',         v:fmt(T),    s:'período selecionado',       c:P.topbarBg,    w:100},
+    {k:'tot', ic:'ti-sum',           l:'Total',         v:fmt(T),    s:'período selecionado',       c:'#FFD600',     w:100},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-ch',[[`Fora prazo ${pct(d.fp,T)}%`,P.foraDoPrazo],[`No prazo ${pct(d.np,T)}%`,P.noPrazo],[`Abertura SM FP ${pct(d.afp,T)}%`,P.aberturaForaPrazo],[`Polígono ${pct(d.pol,T)}%`,P.poligonoIncorreto]]);
@@ -132,6 +132,10 @@ function re(){
   donut('c-saida',DONUT_SAIDA.data,[P.noPrazo,P.foraDoPrazo,'#607D8B','#90A4AE']);
   donut('c-alvo',DONUT_ALVO.data,['#2E7D32','#C62828']);
   donut('c-vinc',DONUT_VINCULO.data,[P.agregado,P.terceiro,P.frota]);
+  // Linhas do tempo
+  renderTimelineCE();
+  renderTimelineSM();
+
   bAg('c-ce',d.fils,[
     {label:'Col',data:d.fils.map(f=>d.pf[f].col),backgroundColor:P.coletas,borderRadius:3,borderSkipped:false},
     {label:'Ent',data:d.fils.map(f=>d.pf[f].ent),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
@@ -236,7 +240,7 @@ function re(){
     {k:'can',ic:'ti-ban',        l:'Canceladas',          v:fmt(totalCan), s:`${pct(totalCan,T)}%`,    c:P.cancelada,         w:pct(totalCan,T)},
     {k:'np', ic:'ti-circle-check',l:'SM abertas no prazo',v:fmt(d.np),    s:`${pct(d.np,T)}% do total`,c:P.noPrazo,           w:pct(d.np,T)},
     {k:'fp', ic:'ti-alert-circle',l:'Chegada fora prazo', v:fmt(d.fp),    s:`${pct(d.fp,T)}% do total`,c:P.foraDoPrazo,       w:pct(d.fp,T)},
-    {k:'tot',ic:'ti-sum',        l:'Total',               v:fmt(T),       s:'período',                 c:P.topbarBg,          w:100},
+    {k:'tot',ic:'ti-sum',        l:'Total',               v:fmt(T),       s:'período',                 c:'#FFD600',           w:100},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-sm',[[`Abertura SM FP ${pct(totalAfp,T)}%`,P.aberturaForaPrazo],[`Polígono incor. ${pct(totalPol,T)}%`,P.poligonoIncorreto],[`Canceladas ${pct(totalCan,T)}%`,P.cancelada],[`No prazo ${pct(d.np,T)}%`,P.noPrazo]]);
@@ -254,6 +258,9 @@ function re(){
     {t:'Canceladas',                  v:fmt(totalCan), p:`${pct(totalCan,T)}%`, bc:P.cancelada,         vc:P.cancelada,         bb:dark?'rgba(96,125,139,.12)':'#ECEFF1', bt:dark?'#607D8B':'#37474F'},
     {t:'SM abertas no prazo',         v:fmt(d.np),     p:`${pct(d.np,T)}%`,     bc:P.noPrazo,           vc:P.noPrazo,           bb:dark?'rgba(0,191,165,.12)':'#D6F5F0',  bt:dark?'#00BFA5':'#005E52'},
   ].map(c=>`<div class="cc" style="border-top-color:${c.bc}"><div class="cct">${c.t}</div><div class="ccv" style="color:${c.vc}">${c.v}</div><span class="bdg" style="background:${c.bb};color:${c.bt}">${c.p}</span></div>`).join('');
+
+  // ── ABA PERMANÊNCIA ──
+  renderPermanencia(fil, tipo);
 }
 
 function periodoRapido(){
@@ -320,7 +327,11 @@ function launchApp() {
   const up  = document.getElementById('upload-screen');
   const app = document.getElementById('app-screen');
   if (up)  up.style.display  = 'none';
-  if (app) app.style.display = 'flex';
+  if (app) {
+    app.style.display = 'flex';
+    app.style.flexDirection = 'column';
+    app.style.minHeight = '100vh';
+  }
 
   // Preencher nome/sub no upload screen
   const upName = document.getElementById('up-name');
@@ -328,15 +339,7 @@ function launchApp() {
   if (upName) upName.textContent = CONFIG.empresa;
   if (upSub)  upSub.textContent  = CONFIG.subtitulo;
 
-  // Preencher select de filiais
-  const sel = document.getElementById('sel-filial');
-  if (sel && sel.options.length <= 1) {
-    FILIAIS.forEach(f => {
-      const o = document.createElement('option');
-      o.value = f; o.textContent = f;
-      sel.appendChild(o);
-    });
-  }
+  // Filiais já populadas no HTML
   // Chamar re() diretamente — DOM já está pronto quando launchApp é chamado
   re();
 }
@@ -351,6 +354,523 @@ function trocarArquivo() {
 }
 
 // Init upload events
+
+// ═══════════════════════════════════════════════════════════
+//  LINHAS DO TEMPO
+// ═══════════════════════════════════════════════════════════
+
+function renderTimelineCE() {
+  const c = cs();
+  const id = 'ch-timeline-ce';
+  kill(id);
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+
+  CH[id] = new Chart(canvas, {
+    type: 'line',
+    data: {
+      labels: MESES,
+      datasets: [
+        {
+          label: 'Coletas',
+          data: MENSAL_CE.coletas,
+          borderColor: CORES.coletas,
+          backgroundColor: CORES.coletas + '18',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBackgroundColor: CORES.coletas,
+          tension: 0.4,
+          fill: true,
+        },
+        {
+          label: 'Entregas',
+          data: MENSAL_CE.entregas,
+          borderColor: CORES.entregas,
+          backgroundColor: CORES.entregas + '18',
+          borderWidth: 2.5,
+          pointRadius: 4,
+          pointHoverRadius: 7,
+          pointBackgroundColor: CORES.entregas,
+          tension: 0.4,
+          fill: true,
+        },
+        {
+          label: 'No prazo',
+          data: MENSAL_CE.noPrazo,
+          borderColor: CORES.noPrazo,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: CORES.noPrazo,
+          borderDash: [],
+          tension: 0.4,
+          fill: false,
+        },
+        {
+          label: 'Fora do prazo',
+          data: MENSAL_CE.foraPrazo,
+          borderColor: CORES.foraDoPrazo,
+          backgroundColor: 'transparent',
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: CORES.foraDoPrazo,
+          borderDash: [5, 3],
+          tension: 0.4,
+          fill: false,
+        },
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: c.tick,
+            font: { size: 10, family: 'Inter,system-ui' },
+            boxWidth: 12,
+            padding: 16,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+          }
+        },
+        tooltip: {
+          ...tt(c),
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('pt-BR')}`,
+          }
+        }
+      },
+      scales: {
+        x: {
+          ...sc(c),
+          grid: { color: c.grid },
+        },
+        y: {
+          ...sc(c),
+          grid: { color: c.grid },
+          ticks: {
+            ...sc(c).ticks,
+            callback: v => v >= 1000 ? (v/1000).toFixed(1)+'k' : v,
+          }
+        }
+      }
+    }
+  });
+}
+
+function renderTimelineSM() {
+  const c = cs();
+  const id = 'ch-timeline-sm';
+  kill(id);
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+
+  // Cores para cada filial no ranking
+  const filColors = [
+    CORES.foraDoPrazo,       // Lages — vermelho (maior)
+    CORES.aberturaForaPrazo, // Telêmaco — laranja
+    '#AB47BC',               // Jundiaí — roxo
+    CORES.noPrazo,           // Otacílio — teal
+    CORES.coletas,           // Guarulhos — azul
+    CORES.entregas,          // Itajaí — verde
+    '#78909C',               // Correia Pinto — cinza
+    '#FFD600',               // Betim — amarelo
+  ];
+
+  const datasets = Object.entries(MENSAL_SM).map(([filial, data], i) => ({
+    label: filial.replace('FL ', ''),
+    data,
+    borderColor: filColors[i],
+    backgroundColor: 'transparent',
+    borderWidth: i < 4 ? 2.5 : 1.5,
+    pointRadius: i < 4 ? 4 : 3,
+    pointHoverRadius: 7,
+    pointBackgroundColor: filColors[i],
+    tension: 0.4,
+    fill: false,
+    hidden: i > 4, // mostrar top 5 por padrão
+  }));
+
+  CH[id] = new Chart(canvas, {
+    type: 'line',
+    data: { labels: MESES, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: {
+          display: true,
+          position: 'top',
+          labels: {
+            color: c.tick,
+            font: { size: 10, family: 'Inter,system-ui' },
+            boxWidth: 12,
+            padding: 12,
+            usePointStyle: true,
+            pointStyleWidth: 10,
+          }
+        },
+        tooltip: {
+          ...tt(c),
+          callbacks: {
+            label: ctx => ` ${ctx.dataset.label}: ${ctx.parsed.y.toLocaleString('pt-BR')}`,
+            afterBody: items => {
+              const total = items.reduce((s,i) => s + i.parsed.y, 0);
+              return [`Total: ${total.toLocaleString('pt-BR')}`];
+            }
+          }
+        }
+      },
+      scales: {
+        x: { ...sc(c), grid: { color: c.grid } },
+        y: {
+          ...sc(c),
+          grid: { color: c.grid },
+          title: {
+            display: true,
+            text: 'Inconsistências',
+            color: c.tick,
+            font: { size: 10 },
+          }
+        }
+      }
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  PERMANÊNCIA
+// ═══════════════════════════════════════════════════════════
+
+// 90 → "1h30" · 45 → "45min"
+function hhmm(min){
+  const m = Math.round(min);
+  if (m < 60) return m + 'min';
+  const h = Math.floor(m/60), r = m%60;
+  return r === 0 ? h + 'h' : h + 'h' + String(r).padStart(2,'0');
+}
+
+// Limites das faixas em minutos (o topo da última é um teto assumido de 12h)
+const FAIXA_LIM = [0, 60, 120, 180, 240, 300, 480, 720];
+
+// Percentil interpolado a partir do histograma — mais fiel que média de medianas
+function percentilFaixa(counts, p){
+  const total = counts.reduce((a,b)=>a+b, 0);
+  if (!total) return 0;
+  const alvo = total * p;
+  let acc = 0;
+  for (let i = 0; i < counts.length; i++){
+    if (acc + counts[i] >= alvo){
+      const dentroFaixa = (alvo - acc) / (counts[i] || 1);
+      return FAIXA_LIM[i] + dentroFaixa * (FAIXA_LIM[i+1] - FAIXA_LIM[i]);
+    }
+    acc += counts[i];
+  }
+  return FAIXA_LIM[FAIXA_LIM.length-1];
+}
+
+function calcPerm(filial, tipo){
+  const fils  = filial === 'TODAS' ? FILIAIS : [filial];
+  const tipos = tipo === 'TODOS' ? ['COLETA','ENTREGA'] : [tipo];
+
+  let dentro = 0, fora = 0, amostra = 0, somaMedia = 0;
+  const pf = {};
+  fils.forEach(f => {
+    pf[f] = { dentro:0, fora:0, amostra:0, mediana:0, p90:0 };
+    let pesoMed = 0;
+    tipos.forEach(t => {
+      const d = TEMPOS[f]?.[t]; if (!d) return;
+      dentro += d.dentro; fora += d.fora; amostra += d.amostra;
+      somaMedia += d.media * d.amostra;
+      pf[f].dentro += d.dentro; pf[f].fora += d.fora; pf[f].amostra += d.amostra;
+      pf[f].mediana += d.mediana * d.amostra;
+      pf[f].p90     += d.p90 * d.amostra;
+      pesoMed += d.amostra;
+    });
+    pf[f].mediana = pesoMed ? Math.round(pf[f].mediana / pesoMed) : 0;
+    pf[f].p90     = pesoMed ? Math.round(pf[f].p90 / pesoMed) : 0;
+  });
+
+  // Histograma consolidado do(s) tipo(s) selecionado(s)
+  const faixas = TEMPOS_FAIXAS.labels.map((_, i) =>
+    tipos.reduce((s, t) => s + TEMPOS_FAIXAS[t][i], 0)
+  );
+
+  // Horas além da carência — proporcional à fatia de estouros da seleção
+  const foraGlobal = FILIAIS.reduce((s,f) =>
+    s + tipos.reduce((x,t) => x + (TEMPOS[f]?.[t]?.fora || 0), 0), 0);
+  const excGlobal = faixas.reduce((s, c, i) => s + c * TEMPOS_FAIXAS.excedenteMedio[i], 0);
+  const excedente = foraGlobal ? excGlobal * (fora / foraGlobal) : 0;
+
+  return {
+    dentro, fora, amostra, pf, fils, faixas, excedente,
+    media:   amostra ? Math.round(somaMedia / amostra) : 0,
+    mediana: filial === 'TODAS' ? percentilFaixa(faixas, 0.50)
+                                : pf[filial].mediana,
+    p90:     filial === 'TODAS' ? percentilFaixa(faixas, 0.90)
+                                : pf[filial].p90,
+  };
+}
+
+function subAbaPerm(t){
+  ['perm-geral','perm-coleta','perm-entrega','perm-filial'].forEach(id=>{
+    const sp = document.getElementById('sp-'+id);
+    const sb = document.getElementById('sub-'+id);
+    if(sp) sp.classList.toggle('on', id===t);
+    if(sb) sb.classList.toggle('on', id===t);
+  });
+  setTimeout(() => {
+    const fil = document.getElementById('sf').value;
+    const tipo = document.getElementById('st').value;
+    renderPermanencia(fil, tipo);
+  }, 50);
+}
+
+function bigStatHtml(b){
+  return `<div class="big-stat"><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`;
+}
+
+function renderPermTipo(prefix, tipoKey, filial){
+  const P = CORES;
+  const c = cs();
+  const d = calcPerm(filial, tipoKey);
+  const T = d.amostra || 1;
+  const label = tipoKey === 'COLETA' ? 'coleta' : 'descarga';
+
+  // Big stats — tempos puros
+  const bs = document.getElementById('bs-perm-'+prefix);
+  if(bs) bs.innerHTML = [
+    { c:P.mediana,  ic:'ti-clock-hour-4',   val:hhmm(d.mediana),
+      lbl:'Mediana de '+label, sub:'metade resolve antes desse tempo' },
+    { c:P.p90,      ic:'ti-clock-exclamation', val:hhmm(d.p90),
+      lbl:'Piores 10% (p90)', sub:'10% das operações passam disso' },
+    { c:'#AB47BC',  ic:'ti-calculator',     val:hhmm(d.media),
+      lbl:'Média de '+label, sub:'puxada pelas operações mais longas' },
+    { c:P.excedente,ic:'ti-alarm',          val:fmt(d.fora),
+      lbl:'Estouros de carência', sub:`${pct(d.fora,T)}% passaram de 5h` },
+  ].map(bigStatHtml).join('');
+
+  // KPIs
+  const kp = document.getElementById('kperm-'+prefix);
+  if(kp) kp.innerHTML = [
+    { k:'med',  ic:'ti-clock-hour-4',      l:'Mediana',   v:hhmm(d.mediana), s:'tempo do caminhão do meio', c:P.mediana, w:Math.min(100,Math.round(d.mediana/CARENCIA_MIN*100)) },
+    { k:'p90',  ic:'ti-clock-exclamation', l:'Piores 10%',v:hhmm(d.p90),     s:'limite dos 10% piores',     c:P.p90,     w:Math.min(100,Math.round(d.p90/CARENCIA_MIN*100)) },
+    { k:'alvo', ic:'ti-target',            l:'Carência',  v:hhmm(CARENCIA_MIN), s:'5h contrato',             c:P.carencia,w:100 },
+    { k:'exc',  ic:'ti-alarm',             l:'Estouros',  v:fmt(d.fora),     s:`${pct(d.fora,T)}%`,         c:P.excedente, w:pct(d.fora,T) },
+    { k:'tot',  ic:'ti-sum',               l:'Registros', v:fmt(T),          s:label+'s apuradas',           c:'#FFD600', w:100 },
+  ].map(kpiHtml).join('');
+
+  // Histograma por faixa
+  const faixas = TEMPOS_FAIXAS.labels.map((_,i) => TEMPOS_FAIXAS[tipoKey][i]);
+  const coresFaixa = TEMPOS_FAIXAS.estouro.map(e => e ? P.excedente : P.mediana);
+  const lgId = 'lg-perm-'+prefix+'-faixa';
+  const lgEl = document.getElementById(lgId);
+  if(lgEl) mkLeg(lgId, [['Dentro da carência', P.mediana],['Acima de 5h', P.excedente]]);
+  const chFaixa = 'c-perm-'+prefix+'-faixa';
+  kill(chFaixa);
+  const cvF = document.getElementById(chFaixa);
+  if(cvF) CH[chFaixa] = new Chart(cvF, {
+    type:'bar',
+    data:{ labels:TEMPOS_FAIXAS.labels, datasets:[{ data:faixas, backgroundColor:coresFaixa, borderRadius:4, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ ...tt(c), callbacks:{
+        label: x => ` ${x.parsed.y.toLocaleString('pt-BR')} registros (${pct(x.parsed.y, faixas.reduce((a,b)=>a+b,0))}%)` }}},
+      scales:{ x:sc(c), y:{...sc(c), min:0} } }
+  });
+
+  // Mediana vs p90 por filial
+  const lgFil = 'lg-perm-'+prefix+'-fil';
+  const lgFE = document.getElementById(lgFil);
+  if(lgFE) mkLeg(lgFil, [['Mediana',P.mediana],['Piores 10% (p90)',P.p90],['Carência 5h',P.carencia]]);
+  const chFil = 'c-perm-'+prefix+'-fil';
+  kill(chFil);
+  const cvFi = document.getElementById(chFil);
+  if(cvFi) CH[chFil] = new Chart(cvFi, {
+    type:'bar',
+    data:{ labels:FILIAIS.map(f=>f.replace('FL ','')), datasets:[
+      { label:'Mediana', data:FILIAIS.map(f => TEMPOS[f]?.[tipoKey]?.mediana || 0), backgroundColor:P.mediana, borderRadius:3, borderSkipped:false },
+      { label:'p90',     data:FILIAIS.map(f => TEMPOS[f]?.[tipoKey]?.p90 || 0),     backgroundColor:P.p90,     borderRadius:3, borderSkipped:false },
+      { label:'Carência',type:'line', data:FILIAIS.map(()=>CARENCIA_MIN), borderColor:P.carencia, borderWidth:2, borderDash:[6,4], pointRadius:0, fill:false },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{...tt(c), callbacks:{ label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}` }}},
+      scales:{ x:{...sc(c), ticks:{...sc(c).ticks, maxRotation:30, autoSkip:false}},
+               y:{...sc(c), min:0, ticks:{...sc(c).ticks, callback:v=>hhmm(v)}} } }
+  });
+}
+
+function renderPermanencia(filial, tipo){
+  if (typeof TEMPOS === 'undefined') return;
+  const P = CORES;
+  const c = cs();
+
+  // ── VISÃO GERAL ──
+  const dc = calcPerm(filial, 'COLETA');
+  const de = calcPerm(filial, 'ENTREGA');
+  const dAll = calcPerm(filial, tipo);
+  const T = dAll.amostra || 1;
+  const taxa = pct(dAll.dentro, T);
+
+  // Cards de tempo operacional (SEM carência)
+  const bsTempos = document.getElementById('bs-perm-tempos');
+  if(bsTempos) bsTempos.innerHTML = [
+    { c:P.coletas,  ic:'ti-package-import',    val:hhmm(dc.mediana),
+      lbl:'Tempo de coleta (mediana)', sub:`p90 ${hhmm(dc.p90)} · média ${hhmm(dc.media)} · ${fmt(dc.amostra)} registros` },
+    { c:P.entregas, ic:'ti-package-export',     val:hhmm(de.mediana),
+      lbl:'Tempo de descarga (mediana)', sub:`p90 ${hhmm(de.p90)} · média ${hhmm(de.media)} · ${fmt(de.amostra)} registros` },
+    { c:P.p90,      ic:'ti-clock-exclamation',  val:hhmm(dc.p90),
+      lbl:'p90 coleta (piores 10%)', sub:'10% das coletas passam disso' },
+    { c:P.p90,      ic:'ti-clock-exclamation',  val:hhmm(de.p90),
+      lbl:'p90 descarga (piores 10%)', sub:'10% das descargas passam disso' },
+  ].map(bigStatHtml).join('');
+
+  // Exposição contratual
+  const bs = document.getElementById('bs-perm');
+  if (bs) bs.innerHTML = [
+    { c:P.noPrazo,   ic:'ti-circle-check',   val:`${taxa}%`,
+      lbl:'Dentro da carência', sub:`${fmt(dAll.dentro)} de ${fmt(T)} registros até 5h00` },
+    { c:P.excedente, ic:'ti-alarm',          val:fmt(dAll.fora),
+      lbl:'Estouros de carência', sub:`${pct(dAll.fora,T)}% passaram de 5h00` },
+    { c:P.foraAlvo,  ic:'ti-hourglass-high', val:fmt(Math.round(dAll.excedente)),
+      lbl:'Horas excedentes', sub:'estimativa acumulada além das 5h' },
+    { c:P.p90,       ic:'ti-arrow-bar-to-up', val:hhmm(dAll.p90),
+      lbl:'p90 geral (piores 10%)', sub:'10% das operações passam disso' },
+  ].map(bigStatHtml).join('');
+
+  // KPIs
+  const kp = document.getElementById('kperm');
+  if (kp) kp.innerHTML = [
+    { k:'med', ic:'ti-clock-hour-4',      l:'Mediana geral',  v:hhmm(dAll.mediana), s:'tempo do caminhão do meio',  c:P.mediana,   w:Math.min(100, Math.round(dAll.mediana/CARENCIA_MIN*100)) },
+    { k:'p90', ic:'ti-clock-exclamation', l:'Piores 10% (p90)',v:hhmm(dAll.p90),    s:'limite dos 10% piores',      c:P.p90,       w:Math.min(100, Math.round(dAll.p90/CARENCIA_MIN*100)) },
+    { k:'saida',ic:'ti-calculator',       l:'Média',          v:hhmm(dAll.media),   s:'puxada pelas mais longas',   c:'#AB47BC',   w:Math.min(100, Math.round(dAll.media/CARENCIA_MIN*100)) },
+    { k:'alvo',ic:'ti-target',            l:'Carência',       v:hhmm(CARENCIA_MIN), s:'5h previsto em contrato',    c:P.carencia,  w:100 },
+    { k:'exc', ic:'ti-alarm',             l:'Estouros',       v:fmt(dAll.fora),     s:`${pct(dAll.fora,T)}% dos registros`, c:P.excedente, w:pct(dAll.fora,T) },
+    { k:'tot', ic:'ti-sum',               l:'Registros',      v:fmt(T),             s:'com tempo apurado',          c:'#FFD600',   w:100 },
+  ].map(kpiHtml).join('');
+
+  // Histograma de faixas
+  const coresFaixa = TEMPOS_FAIXAS.estouro.map(e => e ? P.excedente : P.mediana);
+  mkLeg('lg-perm-faixa', [['Dentro da carência', P.mediana],['Acima de 5h00', P.excedente]]);
+  kill('c-perm-faixa');
+  const cvFaixa = document.getElementById('c-perm-faixa');
+  if (cvFaixa) CH['c-perm-faixa'] = new Chart(cvFaixa, {
+    type:'bar',
+    data:{ labels:TEMPOS_FAIXAS.labels, datasets:[{ data:dAll.faixas, backgroundColor:coresFaixa, borderRadius:4, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ ...tt(c), callbacks:{
+        label: x => ` ${x.parsed.y.toLocaleString('pt-BR')} registros (${pct(x.parsed.y, dAll.faixas.reduce((a,b)=>a+b,0))}%)` } } },
+      scales:{ x:sc(c), y:{ ...sc(c), min:0 } } }
+  });
+
+  // Estouros por filial
+  hb1('c-perm-estouro', FILIAIS, FILIAIS.map(f => {
+    const t = tipo === 'TODOS' ? ['COLETA','ENTREGA'] : [tipo];
+    return t.reduce((s, x) => s + (TEMPOS[f]?.[x]?.fora || 0), 0);
+  }), P.excedente);
+
+  // Mediana vs p90 por filial — coleta e entrega lado a lado
+  mkLeg('lg-perm-fil', [['Mediana coleta', P.coletas],['Mediana descarga', P.entregas],['p90 coleta', P.coletas+'88'],['p90 descarga', P.entregas+'88'],['Carência 5h', P.carencia]]);
+  kill('c-perm-fil');
+  const cvFil = document.getElementById('c-perm-fil');
+  if (cvFil) CH['c-perm-fil'] = new Chart(cvFil, {
+    type:'bar',
+    data:{ labels:FILIAIS.map(f => f.replace('FL ','')), datasets:[
+      { label:'Mediana coleta',   data:FILIAIS.map(f => TEMPOS[f]?.COLETA?.mediana || 0),  backgroundColor:P.coletas,  borderRadius:3, borderSkipped:false },
+      { label:'Mediana descarga', data:FILIAIS.map(f => TEMPOS[f]?.ENTREGA?.mediana || 0), backgroundColor:P.entregas, borderRadius:3, borderSkipped:false },
+      { label:'p90 coleta',       data:FILIAIS.map(f => TEMPOS[f]?.COLETA?.p90 || 0),      backgroundColor:P.coletas+'55',  borderRadius:3, borderSkipped:false },
+      { label:'p90 descarga',     data:FILIAIS.map(f => TEMPOS[f]?.ENTREGA?.p90 || 0),     backgroundColor:P.entregas+'55', borderRadius:3, borderSkipped:false },
+      { label:'Carência',type:'line', data:FILIAIS.map(()=>CARENCIA_MIN), borderColor:P.carencia, borderWidth:2, borderDash:[6,4], pointRadius:0, fill:false },
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{display:false}, tooltip:{ ...tt(c), callbacks:{ label: x => ` ${x.dataset.label}: ${hhmm(x.parsed.y)}` } } },
+      scales:{ x:{ ...sc(c), ticks:{ ...sc(c).ticks, maxRotation:30, autoSkip:false } },
+               y:{ ...sc(c), min:0, ticks:{ ...sc(c).ticks, callback: v => hhmm(v) } } } }
+  });
+
+  renderTimelinePerm();
+
+  // ── SUB-ABAS: Coleta / Entrega ──
+  renderPermTipo('col', 'COLETA', filial);
+  renderPermTipo('ent', 'ENTREGA', filial);
+
+  // ── POR FILIAL ──
+  const lista = document.getElementById('perm-list');
+  if (lista) lista.innerHTML = FILIAIS.map(f => {
+    const tc = TEMPOS[f]?.COLETA || {};
+    const te = TEMPOS[f]?.ENTREGA || {};
+    const total = (tc.amostra||0) + (te.amostra||0);
+    const dentroT = (tc.dentro||0) + (te.dentro||0);
+    const foraT = (tc.fora||0) + (te.fora||0);
+    const tt2 = total || 1;
+    const bars = [
+      { l:'Dentro 5h',  v:dentroT, c:P.noPrazo },
+      { l:'Acima 5h',   v:foraT,   c:P.excedente },
+    ];
+    return `<div class="filial-row">
+      <div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(total)} registros</span></div>
+      <div class="filial-bars">${bars.map(b => `<div class="fbar-item">
+        <span class="fbar-label">${b.l}</span>
+        <div class="fbar-track"><div class="fbar-fill" style="width:${pct(b.v,tt2)}%;background:${b.c}"></div></div>
+        <span class="fbar-pct" style="color:${b.c}">${pct(b.v,tt2)}%</span>
+      </div>`).join('')}</div>
+      <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
+        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(tc.mediana||0)}</div><div class="fkpi-s">mediana</div></div>
+        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(tc.p90||0)}</div><div class="fkpi-s">piores 10%</div></div>
+        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga med.</div><div class="fkpi-v" style="color:${P.entregas}">${hhmm(te.mediana||0)}</div><div class="fkpi-s">mediana</div></div>
+        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(te.p90||0)}</div><div class="fkpi-s">piores 10%</div></div>
+        <div class="fkpi" style="border-left-color:${P.excedente}"><div class="fkpi-l">Estouros</div><div class="fkpi-v" style="color:${P.excedente}">${fmt(foraT)}</div><div class="fkpi-s">acima de 5h</div></div>
+        <div class="fkpi" style="border-left-color:${P.noPrazo}"><div class="fkpi-l">Cumprimento</div><div class="fkpi-v" style="color:${P.noPrazo}">${pct(dentroT,tt2)}%</div><div class="fkpi-s">carência</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderTimelinePerm(){
+  const c = cs();
+  const id = 'ch-timeline-perm';
+  kill(id);
+  const canvas = document.getElementById(id);
+  if (!canvas) return;
+
+  CH[id] = new Chart(canvas, {
+    type:'line',
+    data:{ labels:MESES, datasets:[
+      { label:'Mediana coleta',  data:TEMPOS_MENSAL.medianaColeta,  borderColor:CORES.coletas,  backgroundColor:CORES.coletas+'18',
+        borderWidth:2.5, pointRadius:4, pointHoverRadius:7, pointBackgroundColor:CORES.coletas,  tension:.4, fill:true,  yAxisID:'y' },
+      { label:'Mediana descarga', data:TEMPOS_MENSAL.medianaEntrega, borderColor:CORES.entregas, backgroundColor:CORES.entregas+'18',
+        borderWidth:2.5, pointRadius:4, pointHoverRadius:7, pointBackgroundColor:CORES.entregas, tension:.4, fill:true,  yAxisID:'y' },
+      { label:'Estouros de carência', data:TEMPOS_MENSAL.estouros,  borderColor:CORES.excedente, backgroundColor:'transparent',
+        borderWidth:2, pointRadius:3, pointHoverRadius:6, pointBackgroundColor:CORES.excedente, borderDash:[5,3], tension:.4, fill:false, yAxisID:'y1' },
+    ]},
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      interaction:{ mode:'index', intersect:false },
+      plugins:{
+        legend:{ display:true, position:'top', labels:{ color:c.tick, font:{size:10,family:'Inter,system-ui'}, boxWidth:12, padding:16, usePointStyle:true, pointStyleWidth:10 } },
+        tooltip:{ ...tt(c), callbacks:{ label: x => x.dataset.yAxisID === 'y1'
+          ? ` ${x.dataset.label}: ${x.parsed.y.toLocaleString('pt-BR')}`
+          : ` ${x.dataset.label}: ${hhmm(x.parsed.y)}` } }
+      },
+      scales:{
+        x:{ ...sc(c), grid:{ color:c.grid } },
+        y:{ ...sc(c), position:'left', grid:{ color:c.grid },
+            title:{ display:true, text:'Mediana (min)', color:c.tick, font:{size:10} },
+            ticks:{ ...sc(c).ticks, callback: v => hhmm(v) } },
+        y1:{ ...sc(c), position:'right', grid:{ drawOnChartArea:false },
+            title:{ display:true, text:'Estouros', color:c.tick, font:{size:10} } },
+      }
+    }
+  });
+}
+
 // Inicializar tudo quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function () {
 
@@ -388,7 +908,11 @@ document.addEventListener('DOMContentLoaded', function () {
   if (upName) upName.textContent = CONFIG.empresa;
   if (upSub)  upSub.textContent  = CONFIG.subtitulo;
 
-  // ── Evento trocar arquivo ─────────────────────────────────
-  const btnTroca = document.getElementById('btn-trocar');
-  if (btnTroca) btnTroca.addEventListener('click', trocarArquivo);
+  // ── Auto-render: se app-screen já visível, renderiza direto ──
+  const appVis = document.getElementById('app-screen');
+  if (appVis && appVis.style.display !== 'none') {
+    re();
+  }
+
+  // btn-trocar usa onclick direto no HTML
 });
