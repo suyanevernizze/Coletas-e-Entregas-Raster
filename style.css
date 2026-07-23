@@ -1,6 +1,4 @@
-/* ============================================================
-   STYLE.CSS — Dashboard Binotto · Painel de Monitoramento
-   ============================================================ */
+/* STYLE.CSS — Dashboard Binotto */
 
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
     body{font-family:'Inter',system-ui,sans-serif;min-height:100vh;transition:background .25s,color .25s}
@@ -92,10 +90,10 @@
     .kpi.ent {--glow-color:#66BB6A}
     .kpi.tot {--glow-color:#FFD600}
     .kpi.saida{--glow-color:#AB47BC}
-    .kpi.alvo {--glow-color:#FF8C00}
     .kpi.med  {--glow-color:#26C6DA}
     .kpi.p90  {--glow-color:#FF7043}
     .kpi.exc  {--glow-color:#D81B60}
+    .kpi.alvo {--glow-color:#FF8C00}
     .kpi:hover{
       border-color:var(--glow-color);
       transform:translateY(-2px);
@@ -115,7 +113,6 @@
     body.dark  .kpi.tot .kv{color:#FFD600 !important}.kpi.saida::after{background:#AB47BC}
     .kpi.alvo::after{background:#FF8C00}
     .kpi.med::after{background:#26C6DA}.kpi.p90::after{background:#FF7043}.kpi.exc::after{background:#D81B60}
-    /* nota de rodapé de card */
     .cnote{font-size:10px;color:var(--txt3);margin-top:8px;line-height:1.5}
     .cnote i{font-size:11px;vertical-align:-1px;margin-right:4px}
     .ki{font-size:14px;margin-bottom:6px;display:block}
