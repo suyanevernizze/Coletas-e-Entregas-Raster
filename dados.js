@@ -11,7 +11,6 @@ const CORES = {
   agregado:"#1565C0", terceiro:"#00838F", frota:"#F57F17",
   dentroAlvo:"#FF8C00", foraAlvo:"#C62828",
   topbarBg:"#004B24",
-  // Permanência
   mediana:"#26C6DA", p90:"#FF7043", excedente:"#D81B60", carencia:"#FFB300",
 };
 const FILIAIS = ["FL Betim","FL Correia Pinto","FL Guarulhos","FL Itajaí","FL Jundiaí","FL Lages","FL Otacílio Costa","FL Telêmaco Borba"];
@@ -57,35 +56,23 @@ const MENSAL_SM = {
 // ============================================================
 //  PERMANÊNCIA — tempo do veículo no ponto (coleta / entrega)
 //  Todos os tempos em MINUTOS.
-//  Base: SAÍDA − CHEGADA de cada registro.
-//  CARENCIA = tempo previsto em contrato; acima disso o tempo
-//  vira excedente e sustenta cobrança de estadia.
+//  CARENCIA = tempo previsto em contrato (5h por cliente).
 // ============================================================
 
-const CARENCIA_MIN = 300;                 // 5h00 contratuais
+const CARENCIA_MIN = 300;
 
+// ── SUB-ABA 1: CARÊNCIA (contratual) ──
 const TEMPOS = {
-  "FL Betim":          { COLETA:{ media:125, mediana:88,  p90:233, dentro:13,   fora:1,   amostra:14 },
-                         ENTREGA:{ media:108, mediana:76,  p90:201, dentro:13,   fora:1,   amostra:14 } },
-  "FL Correia Pinto":  { COLETA:{ media:138, mediana:97,  p90:257, dentro:63,   fora:7,   amostra:70 },
-                         ENTREGA:{ media:118, mediana:83,  p90:220, dentro:65,   fora:5,   amostra:70 } },
-  "FL Guarulhos":      { COLETA:{ media:176, mediana:124, p90:329, dentro:353,  fora:58,  amostra:411 },
-                         ENTREGA:{ media:152, mediana:107, p90:284, dentro:405,  fora:50,  amostra:455 } },
-  "FL Itajaí":         { COLETA:{ media:156, mediana:110, p90:292, dentro:196,  fora:27,  amostra:223 },
-                         ENTREGA:{ media:135, mediana:95,  p90:252, dentro:217,  fora:21,  amostra:238 } },
-  "FL Jundiaí":        { COLETA:{ media:224, mediana:158, p90:419, dentro:1674, fora:445, amostra:2119 },
-                         ENTREGA:{ media:193, mediana:136, p90:360, dentro:1828, fora:401, amostra:2229 } },
-  "FL Lages":          { COLETA:{ media:237, mediana:167, p90:443, dentro:1558, fora:465, amostra:2023 },
-                         ENTREGA:{ media:204, mediana:144, p90:382, dentro:2414, fora:603, amostra:3017 } },
-  "FL Otacílio Costa": { COLETA:{ media:192, mediana:135, p90:358, dentro:1116, fora:212, amostra:1328 },
-                         ENTREGA:{ media:165, mediana:116, p90:307, dentro:1156, fora:173, amostra:1329 } },
-  "FL Telêmaco Borba": { COLETA:{ media:207, mediana:146, p90:387, dentro:1750, fora:384, amostra:2134 },
-                         ENTREGA:{ media:179, mediana:126, p90:334, dentro:1814, fora:320, amostra:2134 } },
+  "FL Betim":          { COLETA:{ media:125, mediana:88,  p90:233, dentro:13,   fora:1,   amostra:14 },   ENTREGA:{ media:108, mediana:76,  p90:201, dentro:13,   fora:1,   amostra:14 } },
+  "FL Correia Pinto":  { COLETA:{ media:138, mediana:97,  p90:257, dentro:63,   fora:7,   amostra:70 },   ENTREGA:{ media:118, mediana:83,  p90:220, dentro:65,   fora:5,   amostra:70 } },
+  "FL Guarulhos":      { COLETA:{ media:176, mediana:124, p90:329, dentro:353,  fora:58,  amostra:411 },  ENTREGA:{ media:152, mediana:107, p90:284, dentro:405,  fora:50,  amostra:455 } },
+  "FL Itajaí":         { COLETA:{ media:156, mediana:110, p90:292, dentro:196,  fora:27,  amostra:223 },  ENTREGA:{ media:135, mediana:95,  p90:252, dentro:217,  fora:21,  amostra:238 } },
+  "FL Jundiaí":        { COLETA:{ media:224, mediana:158, p90:419, dentro:1674, fora:445, amostra:2119 }, ENTREGA:{ media:193, mediana:136, p90:360, dentro:1828, fora:401, amostra:2229 } },
+  "FL Lages":          { COLETA:{ media:237, mediana:167, p90:443, dentro:1558, fora:465, amostra:2023 }, ENTREGA:{ media:204, mediana:144, p90:382, dentro:2414, fora:603, amostra:3017 } },
+  "FL Otacílio Costa": { COLETA:{ media:192, mediana:135, p90:358, dentro:1116, fora:212, amostra:1328 }, ENTREGA:{ media:165, mediana:116, p90:307, dentro:1156, fora:173, amostra:1329 } },
+  "FL Telêmaco Borba": { COLETA:{ media:207, mediana:146, p90:387, dentro:1750, fora:384, amostra:2134 }, ENTREGA:{ media:179, mediana:126, p90:334, dentro:1814, fora:320, amostra:2134 } },
 };
 
-// Distribuição por faixa. As duas últimas faixas estouram a carência.
-// excedenteMedio = horas médias ALÉM das 5h em cada faixa (usado para
-// estimar o total de horas excedentes; ajuste com seus dados reais).
 const TEMPOS_FAIXAS = {
   labels:        ['0–1h','1–2h','2–3h','3–4h','4–5h','5–8h','+8h'],
   estouro:       [false, false, false, false, false, true,  true ],
@@ -94,9 +81,71 @@ const TEMPOS_FAIXAS = {
   ENTREGA:       [1740,  2540,  1905,  1080,  647,   1090,  484  ],
 };
 
-// Evolução mensal — mediana em minutos e nº de estouros de carência
 const TEMPOS_MENSAL = {
   medianaColeta:  [138,144,152,156,149,141,133,140,155,162,151,144],
   medianaEntrega: [119,124,131,135,129,122,115,121,134,140,130,124],
   estouros:       [245,258,285,296,272,251,222,241,289,302,278,234],
+};
+
+// ── SUB-ABA 2: TEMPOS REAIS (operacional) ──
+// Unidades Klabin = pontos de COLETA (origem da carga)
+const UNIDADES_KLABIN = [
+  "Klabin Monte Alegre",    // Telêmaco Borba - PR
+  "Klabin Otacílio Costa",  // SC
+  "Klabin Correia Pinto",   // SC
+  "Klabin Angatuba",        // SP
+  "Klabin Pilar do Sul",    // SP
+  "Klabin Feira de Santana", // BA
+];
+
+const TEMPOS_UNIDADE_KLABIN = {
+  "Klabin Monte Alegre":    { coleta:{ media:195, mediana:142, p90:378, amostra:2134 }, descarga:{ media:168, mediana:121, p90:325, amostra:2134 } },
+  "Klabin Otacílio Costa":  { coleta:{ media:185, mediana:131, p90:348, amostra:1328 }, descarga:{ media:158, mediana:112, p90:298, amostra:1329 } },
+  "Klabin Correia Pinto":   { coleta:{ media:132, mediana:94,  p90:248, amostra:70 },   descarga:{ media:112, mediana:80,  p90:212, amostra:70 } },
+  "Klabin Angatuba":        { coleta:{ media:210, mediana:152, p90:405, amostra:1480 }, descarga:{ media:182, mediana:130, p90:348, amostra:1520 } },
+  "Klabin Pilar do Sul":    { coleta:{ media:218, mediana:160, p90:425, amostra:639 },  descarga:{ media:190, mediana:138, p90:365, amostra:709 } },
+  "Klabin Feira de Santana": { coleta:{ media:165, mediana:118, p90:310, amostra:411 }, descarga:{ media:145, mediana:104, p90:275, amostra:455 } },
+};
+
+// Clientes = pontos de ENTREGA (destino da carga)
+const CLIENTES = [
+  "Ambev",
+  "Natura",
+  "Nestlé",
+  "P&G",
+  "Unilever",
+  "BRF",
+  "JBS",
+  "Magazine Luiza",
+  "Mercado Livre",
+  "Suzano",
+  "Votorantim Cimentos",
+  "Whirlpool",
+];
+
+const TEMPOS_CLIENTE = {
+  "Ambev":               { coleta:{ media:145, mediana:102, p90:275, amostra:820 },  descarga:{ media:125, mediana:88,  p90:238, amostra:845 } },
+  "Natura":              { coleta:{ media:168, mediana:120, p90:318, amostra:415 },  descarga:{ media:142, mediana:100, p90:268, amostra:430 } },
+  "Nestlé":              { coleta:{ media:182, mediana:130, p90:345, amostra:680 },  descarga:{ media:155, mediana:110, p90:292, amostra:710 } },
+  "P&G":                 { coleta:{ media:155, mediana:110, p90:295, amostra:390 },  descarga:{ media:132, mediana:94,  p90:252, amostra:405 } },
+  "Unilever":            { coleta:{ media:175, mediana:125, p90:330, amostra:520 },  descarga:{ media:148, mediana:105, p90:278, amostra:545 } },
+  "BRF":                 { coleta:{ media:198, mediana:142, p90:375, amostra:610 },  descarga:{ media:170, mediana:122, p90:320, amostra:635 } },
+  "JBS":                 { coleta:{ media:215, mediana:155, p90:410, amostra:740 },  descarga:{ media:188, mediana:135, p90:358, amostra:770 } },
+  "Magazine Luiza":      { coleta:{ media:138, mediana:98,  p90:262, amostra:285 },  descarga:{ media:118, mediana:84,  p90:225, amostra:295 } },
+  "Mercado Livre":       { coleta:{ media:128, mediana:90,  p90:245, amostra:350 },  descarga:{ media:108, mediana:76,  p90:205, amostra:365 } },
+  "Suzano":              { coleta:{ media:192, mediana:138, p90:365, amostra:460 },  descarga:{ media:165, mediana:118, p90:312, amostra:480 } },
+  "Votorantim Cimentos": { coleta:{ media:225, mediana:162, p90:430, amostra:530 },  descarga:{ media:198, mediana:142, p90:378, amostra:555 } },
+  "Whirlpool":           { coleta:{ media:158, mediana:112, p90:302, amostra:260 },  descarga:{ media:135, mediana:96,  p90:258, amostra:270 } },
+};
+
+// Cruzamento: filial × tipo (coleta/descarga) — tempos médios reais
+const TEMPOS_FILIAL_TIPO = {
+  "FL Betim":          { coleta:{ media:125, mediana:88,  p90:233 }, descarga:{ media:108, mediana:76,  p90:201 } },
+  "FL Correia Pinto":  { coleta:{ media:138, mediana:97,  p90:257 }, descarga:{ media:118, mediana:83,  p90:220 } },
+  "FL Guarulhos":      { coleta:{ media:176, mediana:124, p90:329 }, descarga:{ media:152, mediana:107, p90:284 } },
+  "FL Itajaí":         { coleta:{ media:156, mediana:110, p90:292 }, descarga:{ media:135, mediana:95,  p90:252 } },
+  "FL Jundiaí":        { coleta:{ media:224, mediana:158, p90:419 }, descarga:{ media:193, mediana:136, p90:360 } },
+  "FL Lages":          { coleta:{ media:237, mediana:167, p90:443 }, descarga:{ media:204, mediana:144, p90:382 } },
+  "FL Otacílio Costa": { coleta:{ media:192, mediana:135, p90:358 }, descarga:{ media:165, mediana:116, p90:307 } },
+  "FL Telêmaco Borba": { coleta:{ media:207, mediana:146, p90:387 }, descarga:{ media:179, mediana:126, p90:334 } },
 };
