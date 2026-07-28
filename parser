@@ -19,7 +19,7 @@ const COL = {
   tempoAlvo:'Tempo no alvo',
 };
 
-const CARENCIA_MIN = 300; // 5h contratuais
+// CARENCIA_MIN é declarada em dados.js (carregado antes deste arquivo)
 
 // ── Helpers ──
 
