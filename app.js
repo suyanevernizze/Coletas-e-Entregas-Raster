@@ -802,11 +802,6 @@ document.addEventListener('DOMContentLoaded', function () {
   if (upName) upName.textContent = CONFIG.empresa;
   if (upSub)  upSub.textContent  = CONFIG.subtitulo;
 
-  // ── PRÉVIA: carrega os dados reais da última planilha e abre o painel ──
-  if (typeof DADOS_SEED !== 'undefined' && DADOS_SEED.FILIAIS?.length){
-    aplicarDados(DADOS_SEED);
-    const badge = document.getElementById('fn');
-    if (badge) badge.textContent = 'Novo_Relatório_Coletas_Entregas_Raster.xlsx  ·  ' + DADOS_SEED.totalValidos.toLocaleString('pt-BR') + ' reg.';
-    launchApp();
-  }
+  // Site sempre abre na tela de upload — usuário arrasta a planilha atualizada.
+  // (DADOS_SEED continua disponível em dados.js, mas não é aplicado automaticamente.)
 });
