@@ -7,17 +7,18 @@
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css"/>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 
   <!-- DADOS EMBUTIDOS -->
   <!-- DADOS: altere dados.js para trocar números sem tocar no layout -->
-  
+  <script src="dados.js"></script>
 
   <link rel="stylesheet" href="style.css"/>
 </head>
 <body class="dark">
 
   <!-- ═══ TELA DE UPLOAD ═══ -->
-  <div id="upload-screen" style="display:none;min-height:100vh;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px">
+  <div id="upload-screen" style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:24px">
     <div style="display:flex;align-items:center;gap:16px">
       <div style="width:50px;height:50px;border-radius:12px;background:#fff;display:flex;align-items:center;justify-content:center;font-size:21px;font-weight:700;color:#004B24;border:1px solid rgba(200,255,220,.5);box-shadow:0 0 0 1px rgba(180,255,210,.3),0 0 12px 4px rgba(80,255,150,.25),0 0 24px 8px rgba(40,200,100,.12),0 2px 10px rgba(0,0,0,.2)">B</div>
       <div>
@@ -49,7 +50,7 @@
   </div>
 
   <!-- ═══ APP PRINCIPAL ═══ -->
-  <div id="app-screen" style="display:flex;flex-direction:column;min-height:100vh">
+  <div id="app-screen" style="display:none;flex-direction:column;min-height:100vh">
 
   <!-- TOPBAR -->
   <div class="topbar">
@@ -259,108 +260,83 @@
 
     <!-- ═══ ABA PERMANÊNCIA ═══ -->
     <div class="tab-panel" id="p-perm">
-
-      <!-- Sub-abas -->
       <div class="subtabs">
         <div class="subtab on" onclick="subAbaPerm('carencia')" id="sub-carencia"><i class="ti ti-file-certificate" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Carência</div>
         <div class="subtab" onclick="subAbaPerm('tempos-reais')" id="sub-tempos-reais"><i class="ti ti-clock-hour-4" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Tempos reais</div>
       </div>
 
-      <!-- ═══ SUB: CARÊNCIA (contratual — 5h) ═══ -->
+      <!-- SUB: CARÊNCIA -->
       <div class="sub-panel on" id="sp-carencia">
-
         <div class="rule"><strong>Carência contratual: 5h00 por cliente.</strong><br>
-          Permanência = <span style="color:#26C6DA;font-weight:600">saída − chegada</span> no ponto de coleta ou entrega.
-          Abaixo de 5h o tempo está previsto em contrato; acima, vira
-          <span style="color:#D81B60;font-weight:600">excedente</span> e é o que sustenta cobrança de estadia.<br>
-          <span style="color:var(--txt3)">Mediana = tempo do caminhão do meio · p90 = limite dos 10% piores.</span>
+          Permanência = <span style="color:#26C6DA;font-weight:600">saída − chegada</span> no ponto.
+          Abaixo de 5h está previsto em contrato; acima, vira <span style="color:#D81B60;font-weight:600">excedente</span>.<br>
+          <span style="color:var(--txt3)">Mediana = caminhão do meio · p90 = limite dos 10% piores.</span>
         </div>
-
         <div class="sdiv">Exposição contratual — carência de 5h00</div>
         <div class="big-stats-row" id="bs-perm"></div>
-
-        <div class="sdiv">Tempo de permanência — indicadores da operação</div>
+        <div class="sdiv">Indicadores da operação</div>
         <div class="krow" id="kperm"></div>
-
         <div class="g2">
           <div class="card">
             <div class="ct"><i class="ti ti-chart-histogram" aria-hidden="true"></i>Distribuição por faixa de permanência</div>
             <div class="leg" id="lg-perm-faixa"></div>
-            <div style="position:relative;height:200px"><canvas id="c-perm-faixa" role="img" aria-label="Distribuição por faixa de permanência"></canvas></div>
+            <div style="position:relative;height:200px"><canvas id="c-perm-faixa"></canvas></div>
             <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>As duas últimas faixas ultrapassam a carência de 5h.</div>
           </div>
           <div class="card">
             <div class="ct"><i class="ti ti-alarm" aria-hidden="true"></i>Estouros de carência por filial</div>
-            <div style="position:relative;height:200px"><canvas id="c-perm-estouro" role="img" aria-label="Estouros de carência por filial"></canvas></div>
+            <div style="position:relative;height:200px"><canvas id="c-perm-estouro"></canvas></div>
             <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>Registros com permanência acima de 5h00.</div>
           </div>
         </div>
-
         <div class="sdiv">Mediana vs. p90 por filial</div>
         <div class="card">
-          <div class="ct"><i class="ti ti-chart-bar" aria-hidden="true"></i>Metade das operações resolve na mediana — as piores 10% levam o p90</div>
+          <div class="ct"><i class="ti ti-chart-bar" aria-hidden="true"></i>Metade resolve na mediana — as piores 10% levam o p90</div>
           <div class="leg" id="lg-perm-fil"></div>
-          <div style="position:relative;height:280px"><canvas id="c-perm-fil" role="img" aria-label="Mediana e p90 por filial"></canvas></div>
-          <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>A distância entre mediana e p90 mostra o quanto a filial é imprevisível.</div>
+          <div style="position:relative;height:280px"><canvas id="c-perm-fil"></canvas></div>
+          <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>Distância curta entre mediana e p90 = operação estável.</div>
         </div>
-
-        <div class="sdiv">Linha do tempo — evolução mensal</div>
-        <div class="card">
-          <div class="ct"><i class="ti ti-trending-up" aria-hidden="true"></i>Mediana de permanência e estouros de carência por mês</div>
-          <div style="position:relative;height:340px"><canvas id="ch-timeline-perm" role="img" aria-label="Linha do tempo de permanência"></canvas></div>
-        </div>
-
         <div class="sdiv">Detalhamento por filial</div>
         <div class="filial-list" id="perm-list"></div>
-
       </div>
 
-      <!-- ═══ SUB: TEMPOS REAIS (operacional) ═══ -->
+      <!-- SUB: TEMPOS REAIS -->
       <div class="sub-panel" id="sp-tempos-reais">
-
         <div class="rule"><strong>Tempos reais de operação — coleta e descarga.</strong><br>
-          Aqui o que importa é <span style="color:#29B6F6;font-weight:600">quanto tempo de fato leva</span> cada operação, independente da carência contratual.<br>
+          O que importa aqui é <span style="color:#29B6F6;font-weight:600">quanto tempo de fato leva</span> cada operação, independente da carência.<br>
           <span style="color:var(--txt3)">4h50 dentro da carência ≠ eficiente. Aqui a gente enxerga isso.</span>
         </div>
-
         <div class="sdiv">Visão geral — coleta vs. descarga</div>
         <div class="big-stats-row" id="bs-tr-geral"></div>
-
-        <div class="sdiv">Tempos por filial — coleta e descarga</div>
+        <div class="sdiv">Tempos por filial</div>
         <div class="card">
           <div class="ct"><i class="ti ti-building-factory" aria-hidden="true"></i>Mediana de coleta vs. descarga por filial</div>
           <div class="leg" id="lg-tr-filial"></div>
-          <div style="position:relative;height:280px"><canvas id="c-tr-filial" role="img" aria-label="Tempos por filial"></canvas></div>
+          <div style="position:relative;height:280px"><canvas id="c-tr-filial"></canvas></div>
         </div>
-
         <div class="sdiv">Tempos por unidade Klabin (origem da coleta)</div>
         <div class="big-stats-row" id="bs-tr-klabin"></div>
         <div class="card">
           <div class="ct"><i class="ti ti-building-factory-2" aria-hidden="true"></i>Mediana de coleta e descarga por unidade Klabin</div>
           <div class="leg" id="lg-tr-klabin"></div>
-          <div style="position:relative;height:260px"><canvas id="c-tr-klabin" role="img" aria-label="Tempos por unidade Klabin"></canvas></div>
+          <div style="position:relative;height:260px"><canvas id="c-tr-klabin"></canvas></div>
         </div>
-
         <div class="sdiv">Tempos por cliente (destino da entrega)</div>
         <div class="card">
           <div class="ct"><i class="ti ti-users" aria-hidden="true"></i>Mediana de coleta e descarga por cliente — ranking</div>
           <div class="leg" id="lg-tr-cliente"></div>
-          <div style="position:relative;height:380px"><canvas id="c-tr-cliente" role="img" aria-label="Tempos por cliente"></canvas></div>
+          <div style="position:relative;height:420px"><canvas id="c-tr-cliente"></canvas></div>
         </div>
-
         <div class="sdiv">Detalhamento por unidade Klabin</div>
         <div class="filial-list" id="tr-klabin-list"></div>
-
         <div class="sdiv">Detalhamento por cliente</div>
         <div class="filial-list" id="tr-cliente-list"></div>
-
       </div>
-
     </div>
   </div>
 </div>
 
-  <script src="dados.js"></script>
+  <script src="parser.js"></script>
   <script src="app.js"></script>
 </body>
 </html>
