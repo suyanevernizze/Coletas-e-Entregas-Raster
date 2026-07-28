@@ -259,8 +259,7 @@ function re(){
     {t:'SM abertas no prazo',         v:fmt(d.np),     p:`${pct(d.np,T)}%`,     bc:P.noPrazo,           vc:P.noPrazo,           bb:dark?'rgba(0,191,165,.12)':'#D6F5F0',  bt:dark?'#00BFA5':'#005E52'},
   ].map(c=>`<div class="cc" style="border-top-color:${c.bc}"><div class="cct">${c.t}</div><div class="ccv" style="color:${c.vc}">${c.v}</div><span class="bdg" style="background:${c.bb};color:${c.bt}">${c.p}</span></div>`).join('');
 
-  // ── ABA PERMANÊNCIA ──
-  renderPermanencia(fil, tipo);
+  if (typeof renderPermanencia === 'function') renderPermanencia(fil, tipo);
 }
 
 function periodoRapido(){
@@ -318,9 +317,33 @@ function limparFiltros(){
 // ─── Upload / Drag & Drop ─────────────────────────────────
 function handleFile(file) {
   if (!file) return;
-  const badge = document.getElementById('fn');
-  if (badge) badge.textContent = file.name + '  ·  ' + (CONFIG.totalRegistros||'') + ' registros';
-  launchApp();
+  const dz = document.getElementById('dropZone');
+  if (dz) dz.classList.add('loading');
+  mostrarStatusUpload('Lendo ' + file.name + '…', false);
+
+  lerPlanilha(file, function(dados){
+    aplicarDados(dados);
+    const badge = document.getElementById('fn');
+    if (badge) badge.textContent = file.name + '  ·  ' + dados.totalValidos.toLocaleString('pt-BR') + ' reg.';
+    if (dz) dz.classList.remove('loading');
+    launchApp();
+  }, function(err){
+    if (dz) dz.classList.remove('loading');
+    mostrarStatusUpload('Não consegui ler essa planilha. Verifique se é o relatório Raster (.xlsx) com as colunas de chegada e saída.', true);
+  });
+}
+
+function mostrarStatusUpload(msg, erro){
+  let el = document.getElementById('upload-status');
+  if (!el){
+    el = document.createElement('div');
+    el.id = 'upload-status';
+    el.style.cssText = 'margin-top:14px;font-size:12px;text-align:center;max-width:400px;line-height:1.6';
+    const dz = document.getElementById('dropZone');
+    if (dz && dz.parentNode) dz.parentNode.insertBefore(el, dz.nextSibling);
+  }
+  el.style.color = erro ? '#EF5350' : 'var(--txt2)';
+  el.textContent = msg;
 }
 
 function launchApp() {
@@ -546,8 +569,9 @@ function renderTimelineSM() {
   });
 }
 
+// Inicializar tudo quando o DOM estiver pronto
 // ═══════════════════════════════════════════════════════════
-//  PERMANÊNCIA — Carência + Tempos Reais
+//  PERMANÊNCIA — render
 // ═══════════════════════════════════════════════════════════
 
 function hhmm(min){
@@ -557,319 +581,191 @@ function hhmm(min){
   return r === 0 ? h + 'h' : h + 'h' + String(r).padStart(2,'0');
 }
 
-const FAIXA_LIM = [0, 60, 120, 180, 240, 300, 480, 720];
-
+const FAIXA_LIM = [0,60,120,180,240,300,480,720];
 function percentilFaixa(counts, p){
-  const total = counts.reduce((a,b)=>a+b, 0);
+  const total = counts.reduce((a,b)=>a+b,0);
   if (!total) return 0;
-  const alvo = total * p;
-  let acc = 0;
-  for (let i = 0; i < counts.length; i++){
-    if (acc + counts[i] >= alvo){
-      const dentroFaixa = (alvo - acc) / (counts[i] || 1);
-      return FAIXA_LIM[i] + dentroFaixa * (FAIXA_LIM[i+1] - FAIXA_LIM[i]);
+  const alvo = total*p; let acc=0;
+  for (let i=0;i<counts.length;i++){
+    if (acc+counts[i] >= alvo){
+      const df=(alvo-acc)/(counts[i]||1);
+      return FAIXA_LIM[i]+df*(FAIXA_LIM[i+1]-FAIXA_LIM[i]);
     }
-    acc += counts[i];
+    acc+=counts[i];
   }
   return FAIXA_LIM[FAIXA_LIM.length-1];
 }
 
 function calcPerm(filial, tipo){
-  const fils  = filial === 'TODAS' ? FILIAIS : [filial];
-  const tipos = tipo === 'TODOS' ? ['COLETA','ENTREGA'] : [tipo];
-  let dentro = 0, fora = 0, amostra = 0, somaMedia = 0;
-  const pf = {};
-  fils.forEach(f => {
-    pf[f] = { dentro:0, fora:0, amostra:0, mediana:0, p90:0 };
-    let pesoMed = 0;
-    tipos.forEach(t => {
-      const d = TEMPOS[f]?.[t]; if (!d) return;
-      dentro += d.dentro; fora += d.fora; amostra += d.amostra;
-      somaMedia += d.media * d.amostra;
-      pf[f].dentro += d.dentro; pf[f].fora += d.fora; pf[f].amostra += d.amostra;
-      pf[f].mediana += d.mediana * d.amostra;
-      pf[f].p90     += d.p90 * d.amostra;
-      pesoMed += d.amostra;
+  const fils = filial==='TODAS' ? FILIAIS : [filial];
+  const tipos = tipo==='TODOS' ? ['COLETA','ENTREGA'] : [tipo];
+  let dentro=0, fora=0, amostra=0, somaMedia=0;
+  const pf={};
+  fils.forEach(f=>{
+    pf[f]={dentro:0,fora:0,amostra:0,mediana:0,p90:0};
+    let peso=0;
+    tipos.forEach(t=>{
+      const d=TEMPOS[f]?.[t]; if(!d) return;
+      dentro+=d.dentro; fora+=d.fora; amostra+=d.amostra; somaMedia+=d.media*d.amostra;
+      pf[f].dentro+=d.dentro; pf[f].fora+=d.fora; pf[f].amostra+=d.amostra;
+      pf[f].mediana+=d.mediana*d.amostra; pf[f].p90+=d.p90*d.amostra; peso+=d.amostra;
     });
-    pf[f].mediana = pesoMed ? Math.round(pf[f].mediana / pesoMed) : 0;
-    pf[f].p90     = pesoMed ? Math.round(pf[f].p90 / pesoMed) : 0;
+    pf[f].mediana=peso?Math.round(pf[f].mediana/peso):0;
+    pf[f].p90=peso?Math.round(pf[f].p90/peso):0;
   });
-  const faixas = TEMPOS_FAIXAS.labels.map((_, i) =>
-    tipos.reduce((s, t) => s + TEMPOS_FAIXAS[t][i], 0)
-  );
-  const foraGlobal = FILIAIS.reduce((s,f) =>
-    s + tipos.reduce((x,t) => x + (TEMPOS[f]?.[t]?.fora || 0), 0), 0);
-  const excGlobal = faixas.reduce((s, c, i) => s + c * TEMPOS_FAIXAS.excedenteMedio[i], 0);
-  const excedente = foraGlobal ? excGlobal * (fora / foraGlobal) : 0;
-  return {
-    dentro, fora, amostra, pf, fils, faixas, excedente,
-    media:   amostra ? Math.round(somaMedia / amostra) : 0,
-    mediana: filial === 'TODAS' ? percentilFaixa(faixas, 0.50) : pf[filial].mediana,
-    p90:     filial === 'TODAS' ? percentilFaixa(faixas, 0.90) : pf[filial].p90,
-  };
+  const faixas=TEMPOS_FAIXAS.labels.map((_,i)=>tipos.reduce((s,t)=>s+(TEMPOS_FAIXAS[t][i]||0),0));
+  const foraGlobal=FILIAIS.reduce((s,f)=>s+tipos.reduce((x,t)=>x+(TEMPOS[f]?.[t]?.fora||0),0),0);
+  const excGlobal=faixas.reduce((s,c,i)=>s+c*TEMPOS_FAIXAS.excedenteMedio[i],0);
+  const excedente=foraGlobal?excGlobal*(fora/foraGlobal):0;
+  return { dentro,fora,amostra,pf,fils,faixas,excedente,
+    media: amostra?Math.round(somaMedia/amostra):0,
+    mediana: filial==='TODAS'?percentilFaixa(faixas,0.5):pf[filial].mediana,
+    p90: filial==='TODAS'?percentilFaixa(faixas,0.9):pf[filial].p90 };
 }
 
 function subAbaPerm(t){
   ['carencia','tempos-reais'].forEach(id=>{
-    const sp = document.getElementById('sp-'+id);
-    const sb = document.getElementById('sub-'+id);
+    const sp=document.getElementById('sp-'+id), sb=document.getElementById('sub-'+id);
     if(sp) sp.classList.toggle('on', id===t);
     if(sb) sb.classList.toggle('on', id===t);
   });
-  setTimeout(() => {
-    const fil = document.getElementById('sf').value;
-    const tipo = document.getElementById('st').value;
-    renderPermanencia(fil, tipo);
-  }, 50);
+  setTimeout(()=>{ re(); }, 50);
 }
 
 function bigStatHtml(b){
   return `<div class="big-stat"><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`;
 }
 
-// ── RENDER CARÊNCIA (exatamente como o projeto original) ──
-
 function renderCarencia(filial, tipo){
-  const P = CORES;
-  const c = cs();
-  const d = calcPerm(filial, tipo);
-  const T = d.amostra || 1;
-  const taxa = pct(d.dentro, T);
-
-  const bs = document.getElementById('bs-perm');
-  if (bs) bs.innerHTML = [
-    { c:P.noPrazo,   ic:'ti-circle-check',    val:`${taxa}%`,              lbl:'Dentro da carência',   sub:`${fmt(d.dentro)} de ${fmt(T)} registros até 5h00` },
-    { c:P.excedente, ic:'ti-alarm',           val:fmt(d.fora),             lbl:'Estouros de carência', sub:`${pct(d.fora,T)}% passaram de 5h00` },
-    { c:P.foraAlvo,  ic:'ti-hourglass-high',  val:fmt(Math.round(d.excedente)), lbl:'Horas excedentes', sub:'estimativa acumulada além das 5h' },
-    { c:P.p90,       ic:'ti-arrow-bar-to-up', val:hhmm(d.p90),            lbl:'p90 (piores 10%)',     sub:'10% das operações passam disso' },
+  const P=CORES, c=cs();
+  const d=calcPerm(filial, tipo);
+  const T=d.amostra||1;
+  const bs=document.getElementById('bs-perm');
+  if(bs) bs.innerHTML=[
+    {c:P.noPrazo,ic:'ti-circle-check',val:`${pct(d.dentro,T)}%`,lbl:'Dentro da carência',sub:`${fmt(d.dentro)} de ${fmt(T)} até 5h00`},
+    {c:P.excedente,ic:'ti-alarm',val:fmt(d.fora),lbl:'Estouros de carência',sub:`${pct(d.fora,T)}% passaram de 5h00`},
+    {c:P.foraAlvo,ic:'ti-hourglass-high',val:fmt(Math.round(d.excedente)),lbl:'Horas excedentes',sub:'estimativa além das 5h'},
+    {c:P.p90,ic:'ti-arrow-bar-to-up',val:hhmm(d.p90),lbl:'p90 (piores 10%)',sub:'10% passam disso'},
   ].map(bigStatHtml).join('');
-
-  const kp = document.getElementById('kperm');
-  if (kp) kp.innerHTML = [
-    { k:'med',  ic:'ti-clock-hour-4',      l:'Mediana',           v:hhmm(d.mediana),    s:'caminhão do meio',              c:P.mediana,   w:Math.min(100, Math.round(d.mediana/CARENCIA_MIN*100)) },
-    { k:'p90',  ic:'ti-clock-exclamation', l:'Piores 10% (p90)',  v:hhmm(d.p90),        s:'limite dos piores',             c:P.p90,       w:Math.min(100, Math.round(d.p90/CARENCIA_MIN*100)) },
-    { k:'saida',ic:'ti-calculator',        l:'Média',             v:hhmm(d.media),      s:'puxada pela cauda longa',       c:'#AB47BC',   w:Math.min(100, Math.round(d.media/CARENCIA_MIN*100)) },
-    { k:'alvo', ic:'ti-target',            l:'Carência',          v:hhmm(CARENCIA_MIN), s:'5h previsto em contrato',       c:P.carencia,  w:100 },
-    { k:'exc',  ic:'ti-alarm',             l:'Estouros',          v:fmt(d.fora),        s:`${pct(d.fora,T)}% dos registros`, c:P.excedente, w:pct(d.fora,T) },
-    { k:'tot',  ic:'ti-sum',               l:'Registros',         v:fmt(T),             s:'com tempo apurado',             c:'#FFD600',   w:100 },
+  const kp=document.getElementById('kperm');
+  if(kp) kp.innerHTML=[
+    {k:'med',ic:'ti-clock-hour-4',l:'Mediana',v:hhmm(d.mediana),s:'caminhão do meio',c:P.mediana,w:Math.min(100,Math.round(d.mediana/CARENCIA_MIN*100))},
+    {k:'p90',ic:'ti-clock-exclamation',l:'Piores 10% (p90)',v:hhmm(d.p90),s:'limite dos piores',c:P.p90,w:Math.min(100,Math.round(d.p90/CARENCIA_MIN*100))},
+    {k:'saida',ic:'ti-calculator',l:'Média',v:hhmm(d.media),s:'puxada pela cauda',c:'#AB47BC',w:Math.min(100,Math.round(d.media/CARENCIA_MIN*100))},
+    {k:'alvo',ic:'ti-target',l:'Carência',v:hhmm(CARENCIA_MIN),s:'5h contrato',c:P.carencia,w:100},
+    {k:'exc',ic:'ti-alarm',l:'Estouros',v:fmt(d.fora),s:`${pct(d.fora,T)}%`,c:P.excedente,w:pct(d.fora,T)},
+    {k:'tot',ic:'ti-sum',l:'Registros',v:fmt(T),s:'com tempo apurado',c:'#FFD600',w:100},
   ].map(kpiHtml).join('');
-
-  const coresFaixa = TEMPOS_FAIXAS.estouro.map(e => e ? P.excedente : P.mediana);
-  mkLeg('lg-perm-faixa', [['Dentro da carência', P.mediana],['Acima de 5h00', P.excedente]]);
+  const coresFaixa=TEMPOS_FAIXAS.estouro.map(e=>e?P.excedente:P.mediana);
+  mkLeg('lg-perm-faixa',[['Dentro da carência',P.mediana],['Acima de 5h00',P.excedente]]);
   kill('c-perm-faixa');
-  const cvFaixa = document.getElementById('c-perm-faixa');
-  if (cvFaixa) CH['c-perm-faixa'] = new Chart(cvFaixa, {
-    type:'bar',
-    data:{ labels:TEMPOS_FAIXAS.labels, datasets:[{ data:d.faixas, backgroundColor:coresFaixa, borderRadius:4, borderSkipped:false }] },
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ ...tt(c), callbacks:{ label: x => ` ${x.parsed.y.toLocaleString('pt-BR')} registros (${pct(x.parsed.y, d.faixas.reduce((a,b)=>a+b,0))}%)` } } },
-      scales:{ x:sc(c), y:{ ...sc(c), min:0 } } }
-  });
-
-  hb1('c-perm-estouro', FILIAIS, FILIAIS.map(f => {
-    const t = tipo === 'TODOS' ? ['COLETA','ENTREGA'] : [tipo];
-    return t.reduce((s, x) => s + (TEMPOS[f]?.[x]?.fora || 0), 0);
-  }), P.excedente);
-
-  mkLeg('lg-perm-fil', [['Mediana', P.mediana], ['p90 (piores 10%)', P.p90], ['Carência 5h', P.carencia]]);
+  const cvF=document.getElementById('c-perm-faixa');
+  if(cvF) CH['c-perm-faixa']=new Chart(cvF,{type:'bar',
+    data:{labels:TEMPOS_FAIXAS.labels,datasets:[{data:d.faixas,backgroundColor:coresFaixa,borderRadius:4,borderSkipped:false}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.parsed.y.toLocaleString('pt-BR')} reg. (${pct(x.parsed.y,d.faixas.reduce((a,b)=>a+b,0))}%)`}}},scales:{x:sc(c),y:{...sc(c),min:0}}}});
+  hb1('c-perm-estouro',FILIAIS,FILIAIS.map(f=>{const t=tipo==='TODOS'?['COLETA','ENTREGA']:[tipo];return t.reduce((s,x)=>s+(TEMPOS[f]?.[x]?.fora||0),0);}),P.excedente);
+  mkLeg('lg-perm-fil',[['Mediana',P.mediana],['p90 (piores 10%)',P.p90],['Carência 5h',P.carencia]]);
   kill('c-perm-fil');
-  const cvFil = document.getElementById('c-perm-fil');
-  if (cvFil) CH['c-perm-fil'] = new Chart(cvFil, {
-    type:'bar',
-    data:{ labels:FILIAIS.map(f => f.replace('FL ','')), datasets:[
-      { label:'Mediana', data:FILIAIS.map(f => calcPerm(f, tipo).pf[f].mediana), backgroundColor:P.mediana, borderRadius:3, borderSkipped:false },
-      { label:'p90',     data:FILIAIS.map(f => calcPerm(f, tipo).pf[f].p90),     backgroundColor:P.p90,     borderRadius:3, borderSkipped:false },
-      { label:'Carência',type:'line', data:FILIAIS.map(() => CARENCIA_MIN), borderColor:P.carencia, borderWidth:2, borderDash:[6,4], pointRadius:0, fill:false },
+  const cvFil=document.getElementById('c-perm-fil');
+  if(cvFil) CH['c-perm-fil']=new Chart(cvFil,{type:'bar',
+    data:{labels:FILIAIS.map(f=>f.replace('FL ','')),datasets:[
+      {label:'Mediana',data:FILIAIS.map(f=>calcPerm(f,tipo).pf[f].mediana),backgroundColor:P.mediana,borderRadius:3,borderSkipped:false},
+      {label:'p90',data:FILIAIS.map(f=>calcPerm(f,tipo).pf[f].p90),backgroundColor:P.p90,borderRadius:3,borderSkipped:false},
+      {label:'Carência',type:'line',data:FILIAIS.map(()=>CARENCIA_MIN),borderColor:P.carencia,borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false},
     ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{ ...tt(c), callbacks:{ label: x => ` ${x.dataset.label}: ${hhmm(x.parsed.y)}` } } },
-      scales:{ x:{ ...sc(c), ticks:{ ...sc(c).ticks, maxRotation:30, autoSkip:false } },
-               y:{ ...sc(c), min:0, ticks:{ ...sc(c).ticks, callback: v => hhmm(v) } } } }
-  });
-
-  renderTimelinePerm();
-
-  const lista = document.getElementById('perm-list');
-  if (lista) lista.innerHTML = d.fils.map(f => {
-    const pd = d.pf[f];
-    const tt2 = pd.amostra || 1;
-    const bars = [
-      { l:'Dentro 5h', v:pd.dentro, c:P.noPrazo },
-      { l:'Acima 5h',  v:pd.fora,   c:P.excedente },
-    ];
-    return `<div class="filial-row">
-      <div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(pd.amostra)} registros · mediana ${hhmm(pd.mediana)}</span></div>
-      <div class="filial-bars">${bars.map(b => `<div class="fbar-item">
-        <span class="fbar-label">${b.l}</span>
-        <div class="fbar-track"><div class="fbar-fill" style="width:${pct(b.v,tt2)}%;background:${b.c}"></div></div>
-        <span class="fbar-pct" style="color:${b.c}">${pct(b.v,tt2)}%</span>
-      </div>`).join('')}</div>
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:30,autoSkip:false}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
+  const lista=document.getElementById('perm-list');
+  if(lista) lista.innerHTML=d.fils.map(f=>{
+    const pd=d.pf[f]; const tt2=pd.amostra||1;
+    const bars=[{l:'Dentro 5h',v:pd.dentro,c:P.noPrazo},{l:'Acima 5h',v:pd.fora,c:P.excedente}];
+    return `<div class="filial-row"><div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(pd.amostra)} reg. · mediana ${hhmm(pd.mediana)}</span></div>
+      <div class="filial-bars">${bars.map(b=>`<div class="fbar-item"><span class="fbar-label">${b.l}</span><div class="fbar-track"><div class="fbar-fill" style="width:${pct(b.v,tt2)}%;background:${b.c}"></div></div><span class="fbar-pct" style="color:${b.c}">${pct(b.v,tt2)}%</span></div>`).join('')}</div>
       <div class="filial-kpis">
         <div class="fkpi" style="border-left-color:${P.mediana}"><div class="fkpi-l">Mediana</div><div class="fkpi-v" style="color:${P.mediana}">${hhmm(pd.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
         <div class="fkpi" style="border-left-color:${P.p90}"><div class="fkpi-l">Piores 10%</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(pd.p90)}</div><div class="fkpi-s">p90</div></div>
         <div class="fkpi" style="border-left-color:${P.excedente}"><div class="fkpi-l">Estouros</div><div class="fkpi-v" style="color:${P.excedente}">${fmt(pd.fora)}</div><div class="fkpi-s">acima de 5h</div></div>
-        <div class="fkpi" style="border-left-color:${P.noPrazo}"><div class="fkpi-l">Cumprimento</div><div class="fkpi-v" style="color:${P.noPrazo}">${pct(pd.dentro,tt2)}%</div><div class="fkpi-s">dentro da carência</div></div>
-      </div>
-    </div>`;
+        <div class="fkpi" style="border-left-color:${P.noPrazo}"><div class="fkpi-l">Cumprimento</div><div class="fkpi-v" style="color:${P.noPrazo}">${pct(pd.dentro,tt2)}%</div><div class="fkpi-s">na carência</div></div>
+      </div></div>`;
   }).join('');
 }
-
-function renderTimelinePerm(){
-  const c = cs();
-  const id = 'ch-timeline-perm';
-  kill(id);
-  const canvas = document.getElementById(id);
-  if (!canvas) return;
-  CH[id] = new Chart(canvas, {
-    type:'line',
-    data:{ labels:MESES, datasets:[
-      { label:'Mediana coleta',  data:TEMPOS_MENSAL.medianaColeta,  borderColor:CORES.coletas,  backgroundColor:CORES.coletas+'18', borderWidth:2.5, pointRadius:4, pointHoverRadius:7, pointBackgroundColor:CORES.coletas,  tension:.4, fill:true,  yAxisID:'y' },
-      { label:'Mediana descarga',data:TEMPOS_MENSAL.medianaEntrega, borderColor:CORES.entregas, backgroundColor:CORES.entregas+'18', borderWidth:2.5, pointRadius:4, pointHoverRadius:7, pointBackgroundColor:CORES.entregas, tension:.4, fill:true,  yAxisID:'y' },
-      { label:'Estouros de carência', data:TEMPOS_MENSAL.estouros,  borderColor:CORES.excedente, backgroundColor:'transparent', borderWidth:2, pointRadius:3, pointHoverRadius:6, pointBackgroundColor:CORES.excedente, borderDash:[5,3], tension:.4, fill:false, yAxisID:'y1' },
-    ]},
-    options:{
-      responsive:true, maintainAspectRatio:false,
-      interaction:{ mode:'index', intersect:false },
-      plugins:{
-        legend:{ display:true, position:'top', labels:{ color:c.tick, font:{size:10,family:'Inter,system-ui'}, boxWidth:12, padding:16, usePointStyle:true, pointStyleWidth:10 } },
-        tooltip:{ ...tt(c), callbacks:{ label: x => x.dataset.yAxisID === 'y1' ? ` ${x.dataset.label}: ${x.parsed.y.toLocaleString('pt-BR')}` : ` ${x.dataset.label}: ${hhmm(x.parsed.y)}` } }
-      },
-      scales:{
-        x:{ ...sc(c), grid:{ color:c.grid } },
-        y:{ ...sc(c), position:'left', grid:{ color:c.grid }, title:{ display:true, text:'Mediana (min)', color:c.tick, font:{size:10} }, ticks:{ ...sc(c).ticks, callback: v => hhmm(v) } },
-        y1:{ ...sc(c), position:'right', grid:{ drawOnChartArea:false }, title:{ display:true, text:'Estouros', color:c.tick, font:{size:10} } },
-      }
-    }
-  });
-}
-
-// ── RENDER TEMPOS REAIS (operacional) ──
 
 function renderTemposReais(filial){
-  const P = CORES;
-  const c = cs();
-
-  // Big stats gerais — coleta vs descarga
-  const allCol = FILIAIS.reduce((s,f) => { const d = TEMPOS_FILIAL_TIPO[f]?.coleta; return d ? { soma:s.soma+d.mediana, n:s.n+1 } : s; }, {soma:0,n:0});
-  const allEnt = FILIAIS.reduce((s,f) => { const d = TEMPOS_FILIAL_TIPO[f]?.descarga; return d ? { soma:s.soma+d.mediana, n:s.n+1 } : s; }, {soma:0,n:0});
-  const medCol = Math.round(allCol.soma / (allCol.n||1));
-  const medEnt = Math.round(allEnt.soma / (allEnt.n||1));
-  const p90Col = FILIAIS.reduce((s,f) => { const d = TEMPOS_FILIAL_TIPO[f]?.coleta; return d ? { soma:s.soma+d.p90, n:s.n+1 } : s; }, {soma:0,n:0});
-  const p90Ent = FILIAIS.reduce((s,f) => { const d = TEMPOS_FILIAL_TIPO[f]?.descarga; return d ? { soma:s.soma+d.p90, n:s.n+1 } : s; }, {soma:0,n:0});
-
-  const bsG = document.getElementById('bs-tr-geral');
-  if(bsG) bsG.innerHTML = [
-    { c:P.coletas,  ic:'ti-package-import',    val:hhmm(medCol),                          lbl:'Mediana de coleta',          sub:`p90 ${hhmm(Math.round(p90Col.soma/(p90Col.n||1)))} · tempo no ponto de carga` },
-    { c:P.entregas, ic:'ti-package-export',     val:hhmm(medEnt),                          lbl:'Mediana de descarga',        sub:`p90 ${hhmm(Math.round(p90Ent.soma/(p90Ent.n||1)))} · tempo no ponto de entrega` },
-    { c:P.p90,      ic:'ti-clock-exclamation',  val:hhmm(Math.round(p90Col.soma/(p90Col.n||1))), lbl:'p90 coleta (piores 10%)',    sub:'10% das coletas passam disso' },
-    { c:P.p90,      ic:'ti-clock-exclamation',  val:hhmm(Math.round(p90Ent.soma/(p90Ent.n||1))), lbl:'p90 descarga (piores 10%)', sub:'10% das descargas passam disso' },
+  const P=CORES, c=cs();
+  const medAgg=(key)=>{ const a=FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.[key]).filter(Boolean); return {med:Math.round(a.reduce((s,x)=>s+x.mediana,0)/(a.length||1)),p90:Math.round(a.reduce((s,x)=>s+x.p90,0)/(a.length||1))}; };
+  const col=medAgg('coleta'), ent=medAgg('descarga');
+  const bsG=document.getElementById('bs-tr-geral');
+  if(bsG) bsG.innerHTML=[
+    {c:P.coletas,ic:'ti-package-import',val:hhmm(col.med),lbl:'Mediana de coleta',sub:`p90 ${hhmm(col.p90)} · tempo no ponto de carga`},
+    {c:P.entregas,ic:'ti-package-export',val:hhmm(ent.med),lbl:'Mediana de descarga',sub:`p90 ${hhmm(ent.p90)} · tempo no ponto de entrega`},
+    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(col.p90),lbl:'p90 coleta (piores 10%)',sub:'10% das coletas passam disso'},
+    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(ent.p90),lbl:'p90 descarga (piores 10%)',sub:'10% das descargas passam disso'},
   ].map(bigStatHtml).join('');
-
-  // Gráfico filial — coleta vs descarga
-  mkLeg('lg-tr-filial', [['Mediana coleta', P.coletas],['Mediana descarga', P.entregas],['p90 coleta', P.coletas+'77'],['p90 descarga', P.entregas+'77']]);
+  mkLeg('lg-tr-filial',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas],['p90 coleta',P.coletas+'77'],['p90 descarga',P.entregas+'77']]);
   kill('c-tr-filial');
-  const cvF = document.getElementById('c-tr-filial');
-  if(cvF) CH['c-tr-filial'] = new Chart(cvF, {
-    type:'bar',
-    data:{ labels:FILIAIS.map(f=>f.replace('FL ','')), datasets:[
-      { label:'Mediana coleta',   data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.coleta?.mediana||0),   backgroundColor:P.coletas,       borderRadius:3, borderSkipped:false },
-      { label:'Mediana descarga', data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.descarga?.mediana||0), backgroundColor:P.entregas,      borderRadius:3, borderSkipped:false },
-      { label:'p90 coleta',       data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.coleta?.p90||0),       backgroundColor:P.coletas+'55',  borderRadius:3, borderSkipped:false },
-      { label:'p90 descarga',     data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.descarga?.p90||0),     backgroundColor:P.entregas+'55', borderRadius:3, borderSkipped:false },
+  const cvF=document.getElementById('c-tr-filial');
+  if(cvF) CH['c-tr-filial']=new Chart(cvF,{type:'bar',
+    data:{labels:FILIAIS.map(f=>f.replace('FL ','')),datasets:[
+      {label:'Mediana coleta',data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.coleta?.mediana||0),backgroundColor:P.coletas,borderRadius:3,borderSkipped:false},
+      {label:'Mediana descarga',data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.descarga?.mediana||0),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
+      {label:'p90 coleta',data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.coleta?.p90||0),backgroundColor:P.coletas+'55',borderRadius:3,borderSkipped:false},
+      {label:'p90 descarga',data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.descarga?.p90||0),backgroundColor:P.entregas+'55',borderRadius:3,borderSkipped:false},
     ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{...tt(c), callbacks:{ label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}` }}},
-      scales:{ x:{...sc(c), ticks:{...sc(c).ticks, maxRotation:30, autoSkip:false}}, y:{...sc(c), min:0, ticks:{...sc(c).ticks, callback:v=>hhmm(v)}} } }
-  });
-
-  // ── Unidades Klabin ──
-  const bsK = document.getElementById('bs-tr-klabin');
-  if(bsK){
-    const sorted = [...UNIDADES_KLABIN].sort((a,b) => (TEMPOS_UNIDADE_KLABIN[b]?.coleta?.amostra||0) - (TEMPOS_UNIDADE_KLABIN[a]?.coleta?.amostra||0));
-    const top = sorted[0];
-    const topD = TEMPOS_UNIDADE_KLABIN[top];
-    const worst = sorted.reduce((w,u) => (TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0) > (TEMPOS_UNIDADE_KLABIN[w]?.coleta?.mediana||0) ? u : w, sorted[0]);
-    const worstD = TEMPOS_UNIDADE_KLABIN[worst];
-    bsK.innerHTML = [
-      { c:P.coletas,  ic:'ti-building-factory-2', val:hhmm(topD.coleta.mediana),  lbl:top+' (maior volume)', sub:`${fmt(topD.coleta.amostra)} coletas · p90 ${hhmm(topD.coleta.p90)}` },
-      { c:P.excedente,ic:'ti-alert-triangle',     val:hhmm(worstD.coleta.mediana), lbl:worst+' (maior tempo)', sub:`mediana de coleta · p90 ${hhmm(worstD.coleta.p90)}` },
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:30,autoSkip:false}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
+  // Klabin
+  const bsK=document.getElementById('bs-tr-klabin');
+  if(bsK && UNIDADES_KLABIN.length){
+    const top=UNIDADES_KLABIN[0], topD=TEMPOS_UNIDADE_KLABIN[top];
+    const worst=UNIDADES_KLABIN.reduce((w,u)=>(TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0)>(TEMPOS_UNIDADE_KLABIN[w]?.coleta?.mediana||0)?u:w,UNIDADES_KLABIN[0]);
+    const worstD=TEMPOS_UNIDADE_KLABIN[worst];
+    bsK.innerHTML=[
+      {c:P.coletas,ic:'ti-building-factory-2',val:hhmm(topD.coleta.mediana),lbl:top+' (maior volume)',sub:`${fmt(topD.coleta.amostra)} coletas · p90 ${hhmm(topD.coleta.p90)}`},
+      {c:P.excedente,ic:'ti-alert-triangle',val:hhmm(worstD.coleta.mediana),lbl:worst+' (maior tempo)',sub:`p90 ${hhmm(worstD.coleta.p90)}`},
     ].map(bigStatHtml).join('');
   }
-
-  mkLeg('lg-tr-klabin', [['Mediana coleta', P.coletas],['Mediana descarga', P.entregas],['p90 coleta', P.coletas+'77'],['p90 descarga', P.entregas+'77']]);
+  mkLeg('lg-tr-klabin',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas],['p90 coleta',P.coletas+'77'],['p90 descarga',P.entregas+'77']]);
   kill('c-tr-klabin');
-  const cvK = document.getElementById('c-tr-klabin');
-  if(cvK) CH['c-tr-klabin'] = new Chart(cvK, {
-    type:'bar',
-    data:{ labels:UNIDADES_KLABIN.map(u=>u.replace('Klabin ','')), datasets:[
-      { label:'Mediana coleta',   data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0),   backgroundColor:P.coletas,       borderRadius:3, borderSkipped:false },
-      { label:'Mediana descarga', data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.mediana||0), backgroundColor:P.entregas,      borderRadius:3, borderSkipped:false },
-      { label:'p90 coleta',       data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.coleta?.p90||0),       backgroundColor:P.coletas+'55',  borderRadius:3, borderSkipped:false },
-      { label:'p90 descarga',     data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.p90||0),     backgroundColor:P.entregas+'55', borderRadius:3, borderSkipped:false },
+  const cvK=document.getElementById('c-tr-klabin');
+  if(cvK) CH['c-tr-klabin']=new Chart(cvK,{type:'bar',
+    data:{labels:UNIDADES_KLABIN.map(u=>u.replace('KLABIN ','').replace('Klabin ','')),datasets:[
+      {label:'Mediana coleta',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0),backgroundColor:P.coletas,borderRadius:3,borderSkipped:false},
+      {label:'Mediana descarga',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.mediana||0),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
+      {label:'p90 coleta',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.coleta?.p90||0),backgroundColor:P.coletas+'55',borderRadius:3,borderSkipped:false},
+      {label:'p90 descarga',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.p90||0),backgroundColor:P.entregas+'55',borderRadius:3,borderSkipped:false},
     ]},
-    options:{ responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{...tt(c), callbacks:{ label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}` }}},
-      scales:{ x:{...sc(c), ticks:{...sc(c).ticks, maxRotation:30, autoSkip:false}}, y:{...sc(c), min:0, ticks:{...sc(c).ticks, callback:v=>hhmm(v)}} } }
-  });
-
-  // ── Clientes — ranking horizontal ──
-  const cliSorted = [...CLIENTES].sort((a,b) => (TEMPOS_CLIENTE[b]?.descarga?.mediana||0) - (TEMPOS_CLIENTE[a]?.descarga?.mediana||0));
-  mkLeg('lg-tr-cliente', [['Mediana coleta', P.coletas],['Mediana descarga', P.entregas]]);
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:35,autoSkip:false,font:{size:9}}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
+  // Clientes
+  const cliSort=[...CLIENTES].sort((a,b)=>(TEMPOS_CLIENTE[b]?.descarga?.mediana||0)-(TEMPOS_CLIENTE[a]?.descarga?.mediana||0));
+  mkLeg('lg-tr-cliente',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas]]);
   kill('c-tr-cliente');
-  const cvC = document.getElementById('c-tr-cliente');
-  if(cvC) CH['c-tr-cliente'] = new Chart(cvC, {
-    type:'bar',
-    data:{ labels:cliSorted, datasets:[
-      { label:'Mediana coleta',   data:cliSorted.map(cl=>TEMPOS_CLIENTE[cl]?.coleta?.mediana||0),   backgroundColor:P.coletas,  borderRadius:3, borderSkipped:false },
-      { label:'Mediana descarga', data:cliSorted.map(cl=>TEMPOS_CLIENTE[cl]?.descarga?.mediana||0), backgroundColor:P.entregas, borderRadius:3, borderSkipped:false },
+  const cvC=document.getElementById('c-tr-cliente');
+  if(cvC) CH['c-tr-cliente']=new Chart(cvC,{type:'bar',
+    data:{labels:cliSort,datasets:[
+      {label:'Mediana coleta',data:cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.coleta?.mediana||0),backgroundColor:P.coletas,borderRadius:3,borderSkipped:false},
+      {label:'Mediana descarga',data:cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.descarga?.mediana||0),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
     ]},
-    options:{ indexAxis:'y', responsive:true, maintainAspectRatio:false,
-      plugins:{ legend:{display:false}, tooltip:{...tt(c), callbacks:{ label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}` }}},
-      scales:{ x:{...sc(c), min:0, ticks:{...sc(c).ticks, callback:v=>hhmm(v)}}, y:{...sc(c)} } }
-  });
-
-  // ── Detalhamento por unidade Klabin ──
-  const listaK = document.getElementById('tr-klabin-list');
-  if(listaK) listaK.innerHTML = UNIDADES_KLABIN.map(u => {
-    const d = TEMPOS_UNIDADE_KLABIN[u]; if(!d) return '';
-    return `<div class="filial-row">
-      <div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
-      <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(d.coleta.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.coleta.p90)}</div><div class="fkpi-s">piores 10%</div></div>
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.coleta.media)}</div><div class="fkpi-s">${fmt(d.coleta.amostra)} reg.</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga med.</div><div class="fkpi-v" style="color:${P.entregas}">${hhmm(d.descarga.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.descarga.p90)}</div><div class="fkpi-s">piores 10%</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
-      </div>
-    </div>`;
-  }).join('');
-
-  // ── Detalhamento por cliente ──
-  const listaC = document.getElementById('tr-cliente-list');
-  if(listaC) listaC.innerHTML = cliSorted.map(cl => {
-    const d = TEMPOS_CLIENTE[cl]; if(!d) return '';
-    return `<div class="filial-row">
-      <div class="filial-header"><span class="filial-name">${cl}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
-      <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(d.coleta.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.coleta.p90)}</div><div class="fkpi-s">piores 10%</div></div>
-        <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.coleta.media)}</div><div class="fkpi-s">${fmt(d.coleta.amostra)} reg.</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga med.</div><div class="fkpi-v" style="color:${P.entregas}">${hhmm(d.descarga.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.descarga.p90)}</div><div class="fkpi-s">piores 10%</div></div>
-        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
-      </div>
-    </div>`;
-  }).join('');
+    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.x)}`}}},scales:{x:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}},y:{...sc(c),ticks:{...sc(c).ticks,font:{size:9}}}}}});
+  // Listas detalhadas
+  const detalhe=(u,d)=>`<div class="filial-row"><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
+    <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
+      <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(d.coleta.mediana)}</div><div class="fkpi-s">mediana</div></div>
+      <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.coleta.p90)}</div><div class="fkpi-s">piores 10%</div></div>
+      <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.coleta.media)}</div><div class="fkpi-s">${fmt(d.coleta.amostra)} reg.</div></div>
+      <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga med.</div><div class="fkpi-v" style="color:${P.entregas}">${hhmm(d.descarga.mediana)}</div><div class="fkpi-s">mediana</div></div>
+      <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.descarga.p90)}</div><div class="fkpi-s">piores 10%</div></div>
+      <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
+    </div></div>`;
+  const lK=document.getElementById('tr-klabin-list');
+  if(lK) lK.innerHTML=UNIDADES_KLABIN.map(u=>detalhe(u,TEMPOS_UNIDADE_KLABIN[u])).join('');
+  const lC=document.getElementById('tr-cliente-list');
+  if(lC) lC.innerHTML=cliSort.map(cl=>detalhe(cl,TEMPOS_CLIENTE[cl])).join('');
 }
 
 function renderPermanencia(filial, tipo){
-  if (typeof TEMPOS === 'undefined') return;
+  if (typeof TEMPOS==='undefined' || !FILIAIS.length) return;
   renderCarencia(filial, tipo);
   renderTemposReais(filial);
 }
 
-// Inicializar tudo quando o DOM estiver pronto
 document.addEventListener('DOMContentLoaded', function () {
 
   // ── Eventos de upload / drag-drop ────────────────────────
@@ -906,7 +802,11 @@ document.addEventListener('DOMContentLoaded', function () {
   if (upName) upName.textContent = CONFIG.empresa;
   if (upSub)  upSub.textContent  = CONFIG.subtitulo;
 
-  // btn-trocar usa onclick direto no HTML
-  const appVis = document.getElementById("app-screen");
-  if (appVis && appVis.style.display !== "none") re();
+  // ── PRÉVIA: carrega os dados reais da última planilha e abre o painel ──
+  if (typeof DADOS_SEED !== 'undefined' && DADOS_SEED.FILIAIS?.length){
+    aplicarDados(DADOS_SEED);
+    const badge = document.getElementById('fn');
+    if (badge) badge.textContent = 'Novo_Relatório_Coletas_Entregas_Raster.xlsx  ·  ' + DADOS_SEED.totalValidos.toLocaleString('pt-BR') + ' reg.';
+    launchApp();
+  }
 });
