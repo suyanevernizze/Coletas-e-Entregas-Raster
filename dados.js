@@ -13,8 +13,8 @@ const CORES = {
   topbarBg:"#004B24",
   mediana:"#26C6DA", p90:"#FF7043", excedente:"#D81B60", carencia:"#FFB300",
 };
-const FILIAIS = ["FL Betim","FL Correia Pinto","FL Guarulhos","FL Itajaí","FL Jundiaí","FL Lages","FL Otacílio Costa","FL Telêmaco Borba"];
-const DADOS_BRUTOS = {
+let FILIAIS = ["FL Betim","FL Correia Pinto","FL Guarulhos","FL Itajaí","FL Jundiaí","FL Lages","FL Otacílio Costa","FL Telêmaco Borba"];
+let DADOS_BRUTOS = {
   "FL Betim":         { COLETA:{np:3,fp:7,afp:5,pol:0,can:0,col:14,ent:0},   ENTREGA:{np:2,fp:6,afp:5,pol:0,can:0,col:0,ent:14}},
   "FL Correia Pinto": { COLETA:{np:15,fp:30,afp:19,pol:7,can:0,col:70,ent:0}, ENTREGA:{np:15,fp:29,afp:18,pol:7,can:0,col:0,ent:70}},
   "FL Guarulhos":     { COLETA:{np:170,fp:125,afp:104,pol:20,can:15,col:411,ent:0}, ENTREGA:{np:169,fp:124,afp:103,pol:20,can:14,col:0,ent:455}},
@@ -54,98 +54,43 @@ const MENSAL_SM = {
 };
 
 // ============================================================
-//  PERMANÊNCIA — tempo do veículo no ponto (coleta / entrega)
-//  Todos os tempos em MINUTOS.
-//  CARENCIA = tempo previsto em contrato (5h por cliente).
+//  PERMANÊNCIA — preenchido dinamicamente pelo parser.
+//  Valores iniciais servem só para a primeira renderização.
 // ============================================================
-
 const CARENCIA_MIN = 300;
 
-// ── SUB-ABA 1: CARÊNCIA (contratual) ──
-const TEMPOS = {
-  "FL Betim":          { COLETA:{ media:125, mediana:88,  p90:233, dentro:13,   fora:1,   amostra:14 },   ENTREGA:{ media:108, mediana:76,  p90:201, dentro:13,   fora:1,   amostra:14 } },
-  "FL Correia Pinto":  { COLETA:{ media:138, mediana:97,  p90:257, dentro:63,   fora:7,   amostra:70 },   ENTREGA:{ media:118, mediana:83,  p90:220, dentro:65,   fora:5,   amostra:70 } },
-  "FL Guarulhos":      { COLETA:{ media:176, mediana:124, p90:329, dentro:353,  fora:58,  amostra:411 },  ENTREGA:{ media:152, mediana:107, p90:284, dentro:405,  fora:50,  amostra:455 } },
-  "FL Itajaí":         { COLETA:{ media:156, mediana:110, p90:292, dentro:196,  fora:27,  amostra:223 },  ENTREGA:{ media:135, mediana:95,  p90:252, dentro:217,  fora:21,  amostra:238 } },
-  "FL Jundiaí":        { COLETA:{ media:224, mediana:158, p90:419, dentro:1674, fora:445, amostra:2119 }, ENTREGA:{ media:193, mediana:136, p90:360, dentro:1828, fora:401, amostra:2229 } },
-  "FL Lages":          { COLETA:{ media:237, mediana:167, p90:443, dentro:1558, fora:465, amostra:2023 }, ENTREGA:{ media:204, mediana:144, p90:382, dentro:2414, fora:603, amostra:3017 } },
-  "FL Otacílio Costa": { COLETA:{ media:192, mediana:135, p90:358, dentro:1116, fora:212, amostra:1328 }, ENTREGA:{ media:165, mediana:116, p90:307, dentro:1156, fora:173, amostra:1329 } },
-  "FL Telêmaco Borba": { COLETA:{ media:207, mediana:146, p90:387, dentro:1750, fora:384, amostra:2134 }, ENTREGA:{ media:179, mediana:126, p90:334, dentro:1814, fora:320, amostra:2134 } },
-};
+let TEMPOS = {};
+let TEMPOS_FAIXAS = { labels:['0–1h','1–2h','2–3h','3–4h','4–5h','5–8h','+8h'], estouro:[false,false,false,false,false,true,true], excedenteMedio:[0,0,0,0,0,1.2,5.5], COLETA:[0,0,0,0,0,0,0], ENTREGA:[0,0,0,0,0,0,0] };
+let TEMPOS_MENSAL = { medianaColeta:new Array(12).fill(0), medianaEntrega:new Array(12).fill(0), estouros:new Array(12).fill(0) };
+let TEMPOS_FILIAL_TIPO = {};
+let UNIDADES_KLABIN = [];
+let TEMPOS_UNIDADE_KLABIN = {};
+let CLIENTES = [];
+let TEMPOS_CLIENTE = {};
 
-const TEMPOS_FAIXAS = {
-  labels:        ['0–1h','1–2h','2–3h','3–4h','4–5h','5–8h','+8h'],
-  estouro:       [false, false, false, false, false, true,  true ],
-  excedenteMedio:[0,     0,     0,     0,     0,     1.2,   5.5  ],
-  COLETA:        [1210,  2015,  1680,  1090,  728,   1080,  519  ],
-  ENTREGA:       [1740,  2540,  1905,  1080,  647,   1090,  484  ],
-};
+// Aplica os dados processados pelo parser às variáveis globais
+function aplicarDados(d){
+  FILIAIS = d.FILIAIS;
+  DADOS_BRUTOS = d.DADOS_BRUTOS;
+  TEMPOS = d.TEMPOS;
+  TEMPOS_FAIXAS = d.TEMPOS_FAIXAS;
+  TEMPOS_FILIAL_TIPO = d.TEMPOS_FILIAL_TIPO;
+  UNIDADES_KLABIN = d.UNIDADES_KLABIN;
+  TEMPOS_UNIDADE_KLABIN = d.TEMPOS_UNIDADE_KLABIN;
+  CLIENTES = d.CLIENTES;
+  TEMPOS_CLIENTE = d.TEMPOS_CLIENTE;
+  CONFIG.totalRegistros = d.totalValidos.toLocaleString('pt-BR');
+  // Repopular o dropdown de filiais
+  const sf = document.getElementById('sf');
+  if (sf){
+    const atual = sf.value;
+    sf.innerHTML = '<option value="TODAS">Todas as filiais</option>' +
+      FILIAIS.map(f => `<option value="${f}">${f}</option>`).join('');
+    if ([...sf.options].some(o=>o.value===atual)) sf.value = atual;
+  }
+}
 
-const TEMPOS_MENSAL = {
-  medianaColeta:  [138,144,152,156,149,141,133,140,155,162,151,144],
-  medianaEntrega: [119,124,131,135,129,122,115,121,134,140,130,124],
-  estouros:       [245,258,285,296,272,251,222,241,289,302,278,234],
-};
 
-// ── SUB-ABA 2: TEMPOS REAIS (operacional) ──
-// Unidades Klabin = pontos de COLETA (origem da carga)
-const UNIDADES_KLABIN = [
-  "Klabin Monte Alegre",    // Telêmaco Borba - PR
-  "Klabin Otacílio Costa",  // SC
-  "Klabin Correia Pinto",   // SC
-  "Klabin Angatuba",        // SP
-  "Klabin Pilar do Sul",    // SP
-  "Klabin Feira de Santana", // BA
-];
 
-const TEMPOS_UNIDADE_KLABIN = {
-  "Klabin Monte Alegre":    { coleta:{ media:195, mediana:142, p90:378, amostra:2134 }, descarga:{ media:168, mediana:121, p90:325, amostra:2134 } },
-  "Klabin Otacílio Costa":  { coleta:{ media:185, mediana:131, p90:348, amostra:1328 }, descarga:{ media:158, mediana:112, p90:298, amostra:1329 } },
-  "Klabin Correia Pinto":   { coleta:{ media:132, mediana:94,  p90:248, amostra:70 },   descarga:{ media:112, mediana:80,  p90:212, amostra:70 } },
-  "Klabin Angatuba":        { coleta:{ media:210, mediana:152, p90:405, amostra:1480 }, descarga:{ media:182, mediana:130, p90:348, amostra:1520 } },
-  "Klabin Pilar do Sul":    { coleta:{ media:218, mediana:160, p90:425, amostra:639 },  descarga:{ media:190, mediana:138, p90:365, amostra:709 } },
-  "Klabin Feira de Santana": { coleta:{ media:165, mediana:118, p90:310, amostra:411 }, descarga:{ media:145, mediana:104, p90:275, amostra:455 } },
-};
-
-// Clientes = pontos de ENTREGA (destino da carga)
-const CLIENTES = [
-  "Ambev",
-  "Natura",
-  "Nestlé",
-  "P&G",
-  "Unilever",
-  "BRF",
-  "JBS",
-  "Magazine Luiza",
-  "Mercado Livre",
-  "Suzano",
-  "Votorantim Cimentos",
-  "Whirlpool",
-];
-
-const TEMPOS_CLIENTE = {
-  "Ambev":               { coleta:{ media:145, mediana:102, p90:275, amostra:820 },  descarga:{ media:125, mediana:88,  p90:238, amostra:845 } },
-  "Natura":              { coleta:{ media:168, mediana:120, p90:318, amostra:415 },  descarga:{ media:142, mediana:100, p90:268, amostra:430 } },
-  "Nestlé":              { coleta:{ media:182, mediana:130, p90:345, amostra:680 },  descarga:{ media:155, mediana:110, p90:292, amostra:710 } },
-  "P&G":                 { coleta:{ media:155, mediana:110, p90:295, amostra:390 },  descarga:{ media:132, mediana:94,  p90:252, amostra:405 } },
-  "Unilever":            { coleta:{ media:175, mediana:125, p90:330, amostra:520 },  descarga:{ media:148, mediana:105, p90:278, amostra:545 } },
-  "BRF":                 { coleta:{ media:198, mediana:142, p90:375, amostra:610 },  descarga:{ media:170, mediana:122, p90:320, amostra:635 } },
-  "JBS":                 { coleta:{ media:215, mediana:155, p90:410, amostra:740 },  descarga:{ media:188, mediana:135, p90:358, amostra:770 } },
-  "Magazine Luiza":      { coleta:{ media:138, mediana:98,  p90:262, amostra:285 },  descarga:{ media:118, mediana:84,  p90:225, amostra:295 } },
-  "Mercado Livre":       { coleta:{ media:128, mediana:90,  p90:245, amostra:350 },  descarga:{ media:108, mediana:76,  p90:205, amostra:365 } },
-  "Suzano":              { coleta:{ media:192, mediana:138, p90:365, amostra:460 },  descarga:{ media:165, mediana:118, p90:312, amostra:480 } },
-  "Votorantim Cimentos": { coleta:{ media:225, mediana:162, p90:430, amostra:530 },  descarga:{ media:198, mediana:142, p90:378, amostra:555 } },
-  "Whirlpool":           { coleta:{ media:158, mediana:112, p90:302, amostra:260 },  descarga:{ media:135, mediana:96,  p90:258, amostra:270 } },
-};
-
-// Cruzamento: filial × tipo (coleta/descarga) — tempos médios reais
-const TEMPOS_FILIAL_TIPO = {
-  "FL Betim":          { coleta:{ media:125, mediana:88,  p90:233 }, descarga:{ media:108, mediana:76,  p90:201 } },
-  "FL Correia Pinto":  { coleta:{ media:138, mediana:97,  p90:257 }, descarga:{ media:118, mediana:83,  p90:220 } },
-  "FL Guarulhos":      { coleta:{ media:176, mediana:124, p90:329 }, descarga:{ media:152, mediana:107, p90:284 } },
-  "FL Itajaí":         { coleta:{ media:156, mediana:110, p90:292 }, descarga:{ media:135, mediana:95,  p90:252 } },
-  "FL Jundiaí":        { coleta:{ media:224, mediana:158, p90:419 }, descarga:{ media:193, mediana:136, p90:360 } },
-  "FL Lages":          { coleta:{ media:237, mediana:167, p90:443 }, descarga:{ media:204, mediana:144, p90:382 } },
-  "FL Otacílio Costa": { coleta:{ media:192, mediana:135, p90:358 }, descarga:{ media:165, mediana:116, p90:307 } },
-  "FL Telêmaco Borba": { coleta:{ media:207, mediana:146, p90:387 }, descarga:{ media:179, mediana:126, p90:334 } },
-};
+// ── SEED: dados reais da última planilha processada (prévia) ──
+const DADOS_SEED = {"FILIAIS": ["FL Betim", "FL Correia Pinto", "FL Guarulhos", "FL Itajaí", "FL Jundiaí", "FL Lages", "FL Otacílio Costa", "FL Telêmaco Borba", "FL Tijucas"], "TEMPOS": {"FL Betim": {"COLETA": {"media": 304, "mediana": 67, "p90": 997, "amostra": 13, "dentro": 7, "fora": 6}, "ENTREGA": {"media": 310, "mediana": 180, "p90": 793, "amostra": 16, "dentro": 12, "fora": 4}}, "FL Correia Pinto": {"COLETA": {"media": 222, "mediana": 164, "p90": 409, "amostra": 52, "dentro": 44, "fora": 8}, "ENTREGA": {"media": 125, "mediana": 68, "p90": 197, "amostra": 58, "dentro": 54, "fora": 4}}, "FL Guarulhos": {"COLETA": {"media": 906, "mediana": 820, "p90": 1852, "amostra": 369, "dentro": 67, "fora": 302}, "ENTREGA": {"media": 452, "mediana": 245, "p90": 1152, "amostra": 217, "dentro": 116, "fora": 101}}, "FL Itajaí": {"COLETA": {"media": 154, "mediana": 107, "p90": 238, "amostra": 127, "dentro": 123, "fora": 4}, "ENTREGA": {"media": 300, "mediana": 107, "p90": 886, "amostra": 195, "dentro": 140, "fora": 55}}, "FL Jundiaí": {"COLETA": {"media": 119, "mediana": 7, "p90": 376, "amostra": 1473, "dentro": 1298, "fora": 175}, "ENTREGA": {"media": 250, "mediana": 119, "p90": 656, "amostra": 1837, "dentro": 1436, "fora": 401}}, "FL Lages": {"COLETA": {"media": 307, "mediana": 210, "p90": 762, "amostra": 1484, "dentro": 1030, "fora": 454}, "ENTREGA": {"media": 359, "mediana": 142, "p90": 1105, "amostra": 2369, "dentro": 1679, "fora": 690}}, "FL Otacílio Costa": {"COLETA": {"media": 223, "mediana": 200, "p90": 360, "amostra": 1064, "dentro": 870, "fora": 194}, "ENTREGA": {"media": 281, "mediana": 128, "p90": 879, "amostra": 1045, "dentro": 771, "fora": 274}}, "FL Telêmaco Borba": {"COLETA": {"media": 164, "mediana": 144, "p90": 296, "amostra": 1872, "dentro": 1690, "fora": 182}, "ENTREGA": {"media": 329, "mediana": 140, "p90": 983, "amostra": 1797, "dentro": 1243, "fora": 554}}, "FL Tijucas": {"COLETA": {"media": 0, "mediana": 0, "p90": 0, "amostra": 0, "dentro": 0, "fora": 0}, "ENTREGA": {"media": 470, "mediana": 470, "p90": 470, "amostra": 1, "dentro": 0, "fora": 1}}}, "TEMPOS_FAIXAS": {"labels": ["0–1h", "1–2h", "2–3h", "3–4h", "4–5h", "5–8h", "+8h"], "estouro": [false, false, false, false, false, true, true], "excedenteMedio": [0, 0, 0, 0, 0, 1.2, 5.5], "COLETA": [1606, 889, 1169, 930, 525, 605, 733], "ENTREGA": [2047, 1470, 965, 611, 355, 531, 1558]}, "TEMPOS_FILIAL_TIPO": {"FL Betim": {"coleta": {"media": 304, "mediana": 67, "p90": 997, "amostra": 13}, "descarga": {"media": 310, "mediana": 180, "p90": 793, "amostra": 16}}, "FL Correia Pinto": {"coleta": {"media": 222, "mediana": 164, "p90": 409, "amostra": 52}, "descarga": {"media": 125, "mediana": 68, "p90": 197, "amostra": 58}}, "FL Guarulhos": {"coleta": {"media": 906, "mediana": 820, "p90": 1852, "amostra": 369}, "descarga": {"media": 452, "mediana": 245, "p90": 1152, "amostra": 217}}, "FL Itajaí": {"coleta": {"media": 154, "mediana": 107, "p90": 238, "amostra": 127}, "descarga": {"media": 300, "mediana": 107, "p90": 886, "amostra": 195}}, "FL Jundiaí": {"coleta": {"media": 119, "mediana": 7, "p90": 376, "amostra": 1473}, "descarga": {"media": 250, "mediana": 119, "p90": 656, "amostra": 1837}}, "FL Lages": {"coleta": {"media": 307, "mediana": 210, "p90": 762, "amostra": 1484}, "descarga": {"media": 359, "mediana": 142, "p90": 1105, "amostra": 2369}}, "FL Otacílio Costa": {"coleta": {"media": 223, "mediana": 200, "p90": 360, "amostra": 1064}, "descarga": {"media": 281, "mediana": 128, "p90": 879, "amostra": 1045}}, "FL Telêmaco Borba": {"coleta": {"media": 164, "mediana": 144, "p90": 296, "amostra": 1872}, "descarga": {"media": 329, "mediana": 140, "p90": 983, "amostra": 1797}}, "FL Tijucas": {"coleta": {"media": 0, "mediana": 0, "p90": 0, "amostra": 0}, "descarga": {"media": 470, "mediana": 470, "p90": 470, "amostra": 1}}}, "UNIDADES_KLABIN": ["ORTIGUEIRA", "OTACILIO COSTA", "JUNDIAI DI", "LG01", "KLABIN LG02", "TIJUCO PRETO", "MONTE ALEGRE", "FIGUEIRA", "TECADI", "ITAJAI", "CORREIA PINTO", "PIRACICABA 01", "TELEMACO BORBA", "SUZANO"], "TEMPOS_UNIDADE_KLABIN": {"ORTIGUEIRA": {"coleta": {"media": 159, "mediana": 138, "p90": 284, "amostra": 1636}, "descarga": {"media": 336, "mediana": 145, "p90": 985, "amostra": 1572}}, "OTACILIO COSTA": {"coleta": {"media": 201, "mediana": 194, "p90": 330, "amostra": 881}, "descarga": {"media": 307, "mediana": 162, "p90": 906, "amostra": 862}}, "JUNDIAI DI": {"coleta": {"media": 7, "mediana": 2, "p90": 20, "amostra": 712}, "descarga": {"media": 231, "mediana": 120, "p90": 481, "amostra": 906}}, "LG01": {"coleta": {"media": 219, "mediana": 179, "p90": 380, "amostra": 693}, "descarga": {"media": 203, "mediana": 120, "p90": 426, "amostra": 786}}, "KLABIN LG02": {"coleta": {"media": 370, "mediana": 249, "p90": 908, "amostra": 592}, "descarga": {"media": 420, "mediana": 157, "p90": 1205, "amostra": 1181}}, "TIJUCO PRETO": {"coleta": {"media": 120, "mediana": 59, "p90": 262, "amostra": 503}, "descarga": {"media": 205, "mediana": 85, "p90": 539, "amostra": 615}}, "MONTE ALEGRE": {"coleta": {"media": 202, "mediana": 192, "p90": 324, "amostra": 230}, "descarga": {"media": 286, "mediana": 108, "p90": 896, "amostra": 218}}, "FIGUEIRA": {"coleta": {"media": 466, "mediana": 381, "p90": 1018, "amostra": 212}, "descarga": {"media": 440, "mediana": 176, "p90": 1221, "amostra": 244}}, "TECADI": {"coleta": {"media": 432, "mediana": 287, "p90": 933, "amostra": 207}, "descarga": {"media": 478, "mediana": 187, "p90": 1365, "amostra": 402}}, "ITAJAI": {"coleta": {"media": 154, "mediana": 107, "p90": 238, "amostra": 127}, "descarga": {"media": 300, "mediana": 107, "p90": 886, "amostra": 195}}, "CORREIA PINTO": {"coleta": {"media": 251, "mediana": 172, "p90": 434, "amostra": 64}, "descarga": {"media": 131, "mediana": 70, "p90": 239, "amostra": 73}}, "PIRACICABA 01": {"coleta": {"media": 257, "mediana": 216, "p90": 453, "amostra": 38}, "descarga": {"media": 240, "mediana": 174, "p90": 439, "amostra": 58}}, "TELEMACO BORBA": {"coleta": {"media": 96, "mediana": 69, "p90": 216, "amostra": 6}, "descarga": {"media": 122, "mediana": 12, "p90": 328, "amostra": 7}}, "SUZANO": {"coleta": {"media": 155, "mediana": 155, "p90": 170, "amostra": 2}, "descarga": {"media": 129, "mediana": 122, "p90": 180, "amostra": 3}}}, "CLIENTES": ["MILI S/A", "ARMAZEM CORREIA PINTO", "PROCOSA PRODUTOS DE BELEZA LTDA", "FOREST PAPER COMERCIO DE PAPEIS LAGES LTDA", "INDAIAL PAPEL EMBALAGENS LTDA", "BN", "VOTORANTIM CIMENTOS SA", "BINOTTO", "CIA. CANOINHAS DE PAPEL", "CONTLOG LOGISTICA E COMERCIO EXTERI LTDA", "NESTLE BRASIL LTDA", "FM LOGISTIC DO BRASIL OPERACOES DE LOGISTICA LTDA", "NESTLE NORDESTE ALIMENTOS E BEBIDAS", "CELUPA INDUSTRIAL CELULOSE E PAPEL GUAIBA LTDA", "FISCHER SA AGROINDUSTRIA", "VOTORANTIM CIMENTOS BRASIL LTDA", "BUNGE ALIMENTOS SA", "CSN CIMENTOS SA", "SANCHEZ CANO LTDA", "MASTER CARGAS BRASIL LTDA"], "TEMPOS_CLIENTE": {"MILI S/A": {"coleta": {"media": 166, "mediana": 102, "p90": 492, "amostra": 469}, "descarga": {"media": 166, "mediana": 102, "p90": 492, "amostra": 469}}, "ARMAZEM CORREIA PINTO": {"coleta": {"media": 371, "mediana": 249, "p90": 909, "amostra": 591}, "descarga": {"media": 170, "mediana": 130, "p90": 314, "amostra": 383}}, "PROCOSA PRODUTOS DE BELEZA LTDA": {"coleta": {"media": 173, "mediana": 143, "p90": 321, "amostra": 299}, "descarga": {"media": 173, "mediana": 143, "p90": 321, "amostra": 299}}, "FOREST PAPER COMERCIO DE PAPEIS LAGES LTDA": {"coleta": {"media": 303, "mediana": 227, "p90": 592, "amostra": 157}, "descarga": {"media": 296, "mediana": 224, "p90": 603, "amostra": 165}}, "INDAIAL PAPEL EMBALAGENS LTDA": {"coleta": {"media": 558, "mediana": 464, "p90": 1028, "amostra": 162}, "descarga": {"media": 558, "mediana": 464, "p90": 1028, "amostra": 162}}, "BN": {"coleta": {"media": 227, "mediana": 106, "p90": 744, "amostra": 120}, "descarga": {"media": 227, "mediana": 106, "p90": 744, "amostra": 120}}, "VOTORANTIM CIMENTOS SA": {"coleta": {"media": 641, "mediana": 418, "p90": 1458, "amostra": 102}, "descarga": {"media": 641, "mediana": 418, "p90": 1458, "amostra": 102}}, "BINOTTO": {"coleta": {"media": 407, "mediana": 218, "p90": 1175, "amostra": 18}, "descarga": {"media": 430, "mediana": 188, "p90": 928, "amostra": 99}}, "CIA. CANOINHAS DE PAPEL": {"coleta": {"media": 349, "mediana": 81, "p90": 1049, "amostra": 93}, "descarga": {"media": 349, "mediana": 81, "p90": 1049, "amostra": 93}}, "CONTLOG LOGISTICA E COMERCIO EXTERI LTDA": {"coleta": {"media": 686, "mediana": 645, "p90": 1142, "amostra": 4}, "descarga": {"media": 449, "mediana": 231, "p90": 910, "amostra": 82}}, "NESTLE BRASIL LTDA": {"coleta": {"media": 138, "mediana": 58, "p90": 308, "amostra": 74}, "descarga": {"media": 138, "mediana": 58, "p90": 308, "amostra": 74}}, "FM LOGISTIC DO BRASIL OPERACOES DE LOGISTICA LTDA": {"coleta": {"media": 159, "mediana": 2, "p90": 374, "amostra": 64}, "descarga": {"media": 159, "mediana": 2, "p90": 374, "amostra": 64}}, "NESTLE NORDESTE ALIMENTOS E BEBIDAS": {"coleta": {"media": 40, "mediana": 26, "p90": 106, "amostra": 62}, "descarga": {"media": 40, "mediana": 26, "p90": 106, "amostra": 62}}, "CELUPA INDUSTRIAL CELULOSE E PAPEL GUAIBA LTDA": {"coleta": {"media": 436, "mediana": 160, "p90": 1254, "amostra": 57}, "descarga": {"media": 436, "mediana": 160, "p90": 1254, "amostra": 57}}, "FISCHER SA AGROINDUSTRIA": {"coleta": {"media": 224, "mediana": 110, "p90": 722, "amostra": 57}, "descarga": {"media": 224, "mediana": 110, "p90": 722, "amostra": 57}}, "VOTORANTIM CIMENTOS BRASIL LTDA": {"coleta": {"media": 715, "mediana": 337, "p90": 1625, "amostra": 56}, "descarga": {"media": 715, "mediana": 337, "p90": 1625, "amostra": 56}}, "BUNGE ALIMENTOS SA": {"coleta": {"media": 671, "mediana": 358, "p90": 1474, "amostra": 56}, "descarga": {"media": 671, "mediana": 358, "p90": 1474, "amostra": 56}}, "CSN CIMENTOS SA": {"coleta": {"media": 1353, "mediana": 1273, "p90": 2510, "amostra": 56}, "descarga": {"media": 1353, "mediana": 1273, "p90": 2510, "amostra": 56}}, "SANCHEZ CANO LTDA": {"coleta": {"media": 306, "mediana": 141, "p90": 1161, "amostra": 51}, "descarga": {"media": 306, "mediana": 141, "p90": 1161, "amostra": 51}}, "MASTER CARGAS BRASIL LTDA": {"coleta": {"media": 572, "mediana": 442, "p90": 1058, "amostra": 50}, "descarga": {"media": 572, "mediana": 442, "p90": 1058, "amostra": 50}}}, "DADOS_BRUTOS": {"FL Betim": {"COLETA": {"np": 7, "fp": 6, "afp": 0, "pol": 0, "can": 0, "col": 19, "ent": 0}, "ENTREGA": {"np": 12, "fp": 4, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 19}}, "FL Correia Pinto": {"COLETA": {"np": 44, "fp": 8, "afp": 0, "pol": 0, "can": 0, "col": 68, "ent": 0}, "ENTREGA": {"np": 54, "fp": 4, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 68}}, "FL Guarulhos": {"COLETA": {"np": 67, "fp": 302, "afp": 0, "pol": 0, "can": 0, "col": 435, "ent": 0}, "ENTREGA": {"np": 116, "fp": 101, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 478}}, "FL Itajaí": {"COLETA": {"np": 123, "fp": 4, "afp": 0, "pol": 0, "can": 0, "col": 227, "ent": 0}, "ENTREGA": {"np": 140, "fp": 55, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 244}}, "FL Jundiaí": {"COLETA": {"np": 1298, "fp": 175, "afp": 0, "pol": 0, "can": 0, "col": 2207, "ent": 0}, "ENTREGA": {"np": 1436, "fp": 401, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 2313}}, "FL Lages": {"COLETA": {"np": 1030, "fp": 454, "afp": 0, "pol": 0, "can": 0, "col": 2048, "ent": 0}, "ENTREGA": {"np": 1679, "fp": 690, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 3105}}, "FL Otacílio Costa": {"COLETA": {"np": 870, "fp": 194, "afp": 0, "pol": 0, "can": 0, "col": 1376, "ent": 0}, "ENTREGA": {"np": 771, "fp": 274, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 1377}}, "FL Telêmaco Borba": {"COLETA": {"np": 1690, "fp": 182, "afp": 0, "pol": 0, "can": 0, "col": 2274, "ent": 0}, "ENTREGA": {"np": 1243, "fp": 554, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 2274}}, "FL Tijucas": {"COLETA": {"np": 0, "fp": 0, "afp": 0, "pol": 0, "can": 0, "col": 1, "ent": 0}, "ENTREGA": {"np": 0, "fp": 1, "afp": 0, "pol": 0, "can": 0, "col": 0, "ent": 1}}}, "totalValidos": 13994, "totalRegistros": 18544, "coletas": 6457, "entregas": 7537};
