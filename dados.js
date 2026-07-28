@@ -67,6 +67,8 @@ let UNIDADES_KLABIN = [];
 let TEMPOS_UNIDADE_KLABIN = {};
 let CLIENTES = [];
 let TEMPOS_CLIENTE = {};
+let RESUMO = { viagens:0, coletas:0, entregas:0, total:0 };
+let RESUMO_POR_FILIAL = {};
 
 // Aplica os dados processados pelo parser às variáveis globais
 function aplicarDados(d){
@@ -79,6 +81,8 @@ function aplicarDados(d){
   TEMPOS_UNIDADE_KLABIN = d.TEMPOS_UNIDADE_KLABIN;
   CLIENTES = d.CLIENTES;
   TEMPOS_CLIENTE = d.TEMPOS_CLIENTE;
+  RESUMO = d.RESUMO || { viagens:0, coletas:0, entregas:0, total:0 };
+  RESUMO_POR_FILIAL = d.RESUMO_POR_FILIAL || {};
   CONFIG.totalRegistros = d.totalValidos.toLocaleString('pt-BR');
   // Repopular o dropdown de filiais
   const sf = document.getElementById('sf');

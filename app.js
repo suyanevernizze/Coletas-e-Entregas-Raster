@@ -6,6 +6,40 @@
 let dark = true;
 document.body.classList.add('dark');
 
+// Registros individuais da última planilha lida (para refiltrar por
+// vínculo/placa/período sem precisar reler o arquivo).
+let REGISTROS_TODOS = [];
+
+// Reaplica vínculo, placa e período sobre REGISTROS_TODOS, reagrega
+// e re-renderiza. Filial/Tipo/Ocorrência continuam sendo aplicados
+// depois, em cima do agregado, como já funcionava.
+function aplicarFiltrosAvancados(){
+  if (typeof agregarRegistros !== 'function' || !REGISTROS_TODOS.length) return;
+
+  const vinc  = document.getElementById('svinc')?.value || '';
+  const placa = (document.getElementById('iplaca')?.value || '').trim().toUpperCase();
+  const ini   = document.getElementById('dt-ini')?.value || '';
+  const fim   = document.getElementById('dt-fim')?.value || '';
+
+  let regs = REGISTROS_TODOS;
+  if (vinc)  regs = regs.filter(r => r.vinculo === vinc);
+  if (placa) regs = regs.filter(r => r.placa.includes(placa));
+  if (ini){
+    const di = new Date(ini + 'T00:00:00');
+    regs = regs.filter(r => r.dataRef && r.dataRef >= di);
+  }
+  if (fim){
+    const dfim = new Date(fim + 'T23:59:59');
+    regs = regs.filter(r => r.dataRef && r.dataRef <= dfim);
+  }
+
+  aplicarDados(agregarRegistros(regs));
+  re();
+
+  const chip = document.getElementById('fchip');
+  if (chip) chip.classList.toggle('lit', !!(vinc || placa || ini || fim));
+}
+
 function tg(){
   dark=!dark;
   document.body.classList.toggle('dark',dark);
@@ -98,6 +132,17 @@ function kpiHtml(k){return `<div class="kpi ${k.k}"><i class="ti ${k.ic} ki" ari
 function re(){
   const fil=document.getElementById('sf').value;
   const tipo=document.getElementById('st').value;
+
+  // ── RESUMO GLOBAL — viagens (por SM), coletas e entregas ──
+  // Sempre visível, independente da aba. Respeita o filtro de Filial;
+  // ignora Tipo, pois viagem é conceito de rota inteira (coleta+entregas).
+  const resumoAtual = (fil === 'TODAS') ? RESUMO : (RESUMO_POR_FILIAL[fil] || {viagens:0,coletas:0,entregas:0,total:0});
+  const rg = document.getElementById('resumo-global');
+  if (rg) rg.innerHTML = [
+    { ic:'ti-route',            c:'#FFB300', val:fmt(resumoAtual.viagens),  lbl:'Total de viagens (SM)' },
+    { ic:'ti-package-import',   c:CORES.coletas,  val:fmt(resumoAtual.coletas),  lbl:'Total de coletas' },
+    { ic:'ti-package-export',   c:CORES.entregas, val:fmt(resumoAtual.entregas), lbl:'Total de entregas' },
+  ].map(r => `<div class="resumo-card"><div class="resumo-icon" style="background:${r.c}22"><i class="ti ${r.ic}" style="color:${r.c};font-size:19px" aria-hidden="true"></i></div><div><div class="resumo-val" style="color:${r.c}">${r.val}</div><div class="resumo-lbl">${r.lbl}</div></div></div>`).join('');
   const occ = document.getElementById('socc')?.value||'TODAS';
   const dtIni = document.getElementById('dt-ini')?.value||'';
   const dtFim = document.getElementById('dt-fim')?.value||'';
@@ -296,7 +341,7 @@ function periodoRapido(){
   if(ini){
     document.getElementById('dt-ini').value = ini;
     document.getElementById('dt-fim').value = fim;
-    re();
+    aplicarFiltrosAvancados();
   }
 }
 
@@ -308,10 +353,11 @@ function limparFiltros(){
   document.getElementById('dt-fim').value='';
   document.getElementById('periodo-rapido').value='';
   document.getElementById('socc').value='TODAS';
-  document.querySelectorAll('.fsel').forEach(s=>{ if(s.tagName==='SELECT' && !['sf','st','socc','periodo-rapido'].includes(s.id)) s.selectedIndex=0; });
+  const vinc = document.getElementById('svinc'); if (vinc) vinc.value='';
+  document.querySelectorAll('.fsel').forEach(s=>{ if(s.tagName==='SELECT' && !['sf','st','socc','periodo-rapido','svinc'].includes(s.id)) s.selectedIndex=0; });
   document.querySelectorAll('.finput').forEach(i=>i.value='');
   document.getElementById('fchip').classList.remove('lit');
-  re();
+  aplicarFiltrosAvancados();
 }
 
 // ─── Upload / Drag & Drop ─────────────────────────────────
@@ -322,6 +368,7 @@ function handleFile(file) {
   mostrarStatusUpload('Lendo ' + file.name + '…', false);
 
   lerPlanilha(file, function(dados){
+    REGISTROS_TODOS = dados._registros || [];
     aplicarDados(dados);
     const badge = document.getElementById('fn');
     if (badge) badge.textContent = file.name + '  ·  ' + dados.totalValidos.toLocaleString('pt-BR') + ' reg.';

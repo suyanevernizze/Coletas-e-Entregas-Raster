@@ -16,7 +16,12 @@ const COL = {
   statusSai:'Status saída do local',
   statusFin:'Status finalização',
   vinculo:  'Vínculo veículo',
+  placa:    'Placa',
   tempoAlvo:'Tempo no alvo',
+  dataRef:  'Data/hora inclusão SM',
+  dataInclusaoSM:  'Data/hora inclusão SM',
+  dataEfetivacaoSM:'Data/hora efetivação SM',
+  smCodigo: 'Solicitação Monitoramento - Código',
 };
 
 // CARENCIA_MIN é declarada em dados.js (carregado antes deste arquivo)
@@ -105,10 +110,10 @@ function stats(arr){
   };
 }
 
-// ── Parser principal ──
-// Recebe array de linhas (objetos) da planilha, devolve todas as
-// estruturas que o dashboard consome.
-function processarPlanilha(rows){
+// ── Parser: linhas cruas → array de registros individuais ──
+// Cada registro guarda também vínculo, placa e data de referência,
+// para permitir refiltrar e reagregar sem reler o arquivo.
+function parseLinhas(rows){
   const registros = [];
 
   rows.forEach(r => {
@@ -125,12 +130,40 @@ function processarPlanilha(rows){
       if (perm < 0 || perm >= 60*48) perm = null; // descarta absurdos
     }
 
+    // Data de referência para filtro de período: usa inclusão da SM
+    // (sempre presente), com fallback na própria chegada.
+    let dataRef = parseDataHora(r[COL.dataRef]);
+    if (!dataRef || ehPlaceholder(dataRef)) dataRef = (ch && !ehPlaceholder(ch)) ? ch : null;
+
+    // ── Categoria de status da SM (Status chegada no local) ──
+    // NO PRAZO / FORA DO PRAZO / CANCELADA / NÃO REGISTRADO.
+    // Quando NÃO REGISTRADO, a regra de negócio distingue:
+    //   < 2h entre inclusão e efetivação da SM → Abertura Fora do Prazo
+    //   >= 2h  → Polígono Incorreto (veículo saiu da área monitorada)
+    const statusChegada = String(r[COL.statusCheg] || '').toUpperCase().trim();
+    let smCategoria = null;
+    if (statusChegada === 'NO PRAZO')      smCategoria = 'np';
+    else if (statusChegada === 'FORA DO PRAZO') smCategoria = 'fp';
+    else if (statusChegada === 'CANCELADA')     smCategoria = 'can';
+    else if (statusChegada === 'NÃO REGISTRADO'){
+      const dInc = parseDataHora(r[COL.dataInclusaoSM]);
+      const dEfe = parseDataHora(r[COL.dataEfetivacaoSM]);
+      const deltaMin = (dInc && dEfe && !ehPlaceholder(dInc) && !ehPlaceholder(dEfe))
+        ? (dEfe - dInc) / 60000 : null;
+      smCategoria = (deltaMin != null && deltaMin < 120) ? 'afp' : 'pol';
+    }
+
     registros.push({
       filial:  normFilial(r[COL.filial]),
       filialRaw: r[COL.filial],
       tipo,
       origem:  r[COL.origem],
       destino: r[COL.destino],
+      vinculo: String(r[COL.vinculo] || '').toUpperCase().trim(),
+      placa:   String(r[COL.placa] || '').toUpperCase().trim(),
+      smCodigo: String(r[COL.smCodigo] || '').trim(),
+      dataRef,
+      statusChegada, smCategoria,
       perm,
       temTempo: perm != null,
       klabinOrigem: ehKlabin(r[COL.origem]) ? nomeUnidade(r[COL.origem]) : null,
@@ -139,6 +172,13 @@ function processarPlanilha(rows){
     });
   });
 
+  return registros;
+}
+
+// ── Agregação: array de registros (já filtrado ou não) → todas as
+// estruturas que o dashboard consome. Reaproveitada tanto na carga
+// inicial quanto sempre que um filtro de vínculo/placa/período muda. ──
+function agregarRegistros(registros){
   const validos = registros.filter(r => r.temTempo);
 
   // ── Filiais presentes (só operacionais, com dados válidos) ──
@@ -214,18 +254,21 @@ function processarPlanilha(rows){
     TEMPOS_CLIENTE[c] = { coleta: col.amostra ? col : desc, descarga: desc };
   });
 
-  // ── DADOS_BRUTOS (aba original CE) — status de prazo ──
+  // ── DADOS_BRUTOS (aba CE e SM) — status real da SM por filial ──
+  // np/fp/afp/pol/can vêm de 'Status chegada no local' (ver smCategoria),
+  // não da carência de 5h (que é exclusiva da aba Permanência).
   const DADOS_BRUTOS = {};
   filiaisSet.forEach(f => {
     DADOS_BRUTOS[f] = {};
     ['COLETA','ENTREGA'].forEach(t => {
       const sub = registros.filter(r => r.filial===f && r.tipo===t);
-      // Recontar por status seria ideal; aqui aproximamos pelos válidos
       const total = sub.length;
       DADOS_BRUTOS[f][t] = {
-        np:  sub.filter(r=>r.dentroCarencia===true).length,
-        fp:  sub.filter(r=>r.dentroCarencia===false).length,
-        afp: 0, pol: 0, can: 0,
+        np:  sub.filter(r=>r.smCategoria==='np').length,
+        fp:  sub.filter(r=>r.smCategoria==='fp').length,
+        afp: sub.filter(r=>r.smCategoria==='afp').length,
+        pol: sub.filter(r=>r.smCategoria==='pol').length,
+        can: sub.filter(r=>r.smCategoria==='can').length,
         col: t==='COLETA'?total:0,
         ent: t==='ENTREGA'?total:0,
       };
@@ -235,17 +278,43 @@ function processarPlanilha(rows){
   // ── Mensal (se houver datas) — placeholder mantém estrutura ──
   const mesesIdx = {};
 
+  // ── RESUMO — total de viagens (por código de SM, não por linha),
+  // coletas e entregas. Serve de referência estável para todas as abas:
+  // uma viagem = 1 código de SM, que pode ter várias entregas (multi-drop).
+  function calcResumoSet(regs){
+    const viagens  = new Set(regs.map(r => r.smCodigo).filter(Boolean)).size;
+    const coletas  = regs.filter(r => r.tipo === 'COLETA').length;
+    const entregas = regs.filter(r => r.tipo === 'ENTREGA').length;
+    return { viagens, coletas, entregas, total: regs.length };
+  }
+  const RESUMO = calcResumoSet(registros);
+  const RESUMO_POR_FILIAL = {};
+  filiaisSet.forEach(f => {
+    RESUMO_POR_FILIAL[f] = calcResumoSet(registros.filter(r => r.filial === f));
+  });
+
   return {
     FILIAIS: filiaisSet,
     TEMPOS, TEMPOS_FAIXAS, TEMPOS_FILIAL_TIPO,
     UNIDADES_KLABIN, TEMPOS_UNIDADE_KLABIN,
     CLIENTES, TEMPOS_CLIENTE,
     DADOS_BRUTOS,
+    RESUMO, RESUMO_POR_FILIAL,
     totalValidos: validos.length,
     totalRegistros: registros.length,
     coletas: validos.filter(r=>r.tipo==='COLETA').length,
     entregas: validos.filter(r=>r.tipo==='ENTREGA').length,
   };
+}
+
+// ── Wrapper usado na primeira leitura do arquivo: parseia e agrega,
+// mas guarda os registros crus em `_registros` para permitir que os
+// filtros de vínculo/placa/período reagreguem depois sem reler o Excel. ──
+function processarPlanilha(rows){
+  const registros = parseLinhas(rows);
+  const agregado = agregarRegistros(registros);
+  agregado._registros = registros;
+  return agregado;
 }
 
 // ── Lê o arquivo (File) e chama o callback com os dados processados ──

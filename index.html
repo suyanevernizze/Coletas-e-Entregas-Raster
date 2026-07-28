@@ -111,24 +111,24 @@
 
       <div class="fg">
         <span class="flbl">Vínculo veículo</span>
-        <select class="fsel" aria-label="Vínculo">
-          <option>Todos</option>
-          <option>Agregado</option>
-          <option>Terceiro</option>
-          <option>Frota</option>
+        <select class="fsel" id="svinc" onchange="aplicarFiltrosAvancados()" aria-label="Vínculo">
+          <option value="">Todos</option>
+          <option value="AGREGADO">Agregado</option>
+          <option value="TERCEIRO">Terceiro</option>
+          <option value="FROTA">Frota</option>
         </select>
       </div>
       <div class="fg">
         <span class="flbl">Placa</span>
-        <input type="text" class="fsel finput" placeholder="ex: ABC1234" aria-label="Placa" maxlength="8" style="text-transform:uppercase"/>
+        <input type="text" class="fsel finput" id="iplaca" oninput="aplicarFiltrosAvancados()" placeholder="ex: ABC1234" aria-label="Placa" maxlength="8" style="text-transform:uppercase"/>
       </div>
       <div class="fg">
         <span class="flbl">Data início</span>
-        <input type="date" class="fsel fdate" id="dt-ini" aria-label="Data inicial"/>
+        <input type="date" class="fsel fdate" id="dt-ini" onchange="aplicarFiltrosAvancados()" aria-label="Data inicial"/>
       </div>
       <div class="fg">
         <span class="flbl">Data fim</span>
-        <input type="date" class="fsel fdate" id="dt-fim" aria-label="Data final"/>
+        <input type="date" class="fsel fdate" id="dt-fim" onchange="aplicarFiltrosAvancados()" aria-label="Data final"/>
       </div>
       <div class="fg">
         <span class="flbl">Período rápido</span>
@@ -148,6 +148,11 @@
         </button>
       </div>
     </div>
+  </div>
+
+  <!-- ═══ RESUMO GLOBAL — visível em todas as abas ═══ -->
+  <div class="resumo-wrap">
+    <div class="resumo-inner" id="resumo-global"></div>
   </div>
 
   <div class="main">
