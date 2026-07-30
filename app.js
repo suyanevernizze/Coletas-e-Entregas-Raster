@@ -9,6 +9,135 @@ document.body.classList.add('dark');
 // Registros individuais da última planilha lida (para refiltrar por
 // vínculo/placa/período sem precisar reler o arquivo).
 let REGISTROS_TODOS = [];
+// Subconjunto atualmente ativo após vínculo/placa/período (base pro drill-down).
+let REGISTROS_ATIVOS = [];
+
+// ═══════════════════════════════════════════════════════════
+//  DRILL-DOWN — clique em qualquer card mostra o detalhe
+// ═══════════════════════════════════════════════════════════
+
+// Gera o atributo clicável para um card, guardando o critério de
+// filtro em data-detalhe (evita gambiarra de escapar aspas em onclick).
+function critAttr(crit, tit){
+  if (!crit) return '';
+  const payload = JSON.stringify({ crit, tit: tit || '' }).replace(/'/g, '&#39;');
+  return ` data-detalhe='${payload}' onclick="abrirDetalheAttr(this)"`;
+}
+function abrirDetalheAttr(el){
+  try{
+    const { crit, tit } = JSON.parse(el.dataset.detalhe);
+    abrirDetalhe(crit, tit);
+  }catch(e){ console.error('Erro ao abrir detalhe:', e); }
+}
+
+function baseRegs(){ return REGISTROS_ATIVOS.length ? REGISTROS_ATIVOS : REGISTROS_TODOS; }
+
+function filtrarPorCriterios(regs, crit){
+  let r = regs;
+  if (crit.filial)       r = r.filter(x => x.filial === crit.filial);
+  if (crit.tipo && crit.tipo !== 'TODOS') r = r.filter(x => x.tipo === crit.tipo);
+  if (crit.smCategoria)  r = r.filter(x => x.smCategoria === crit.smCategoria);
+  if (crit.smCategorias) r = r.filter(x => crit.smCategorias.includes(x.smCategoria));
+  if (crit.dentroCarencia !== undefined) r = r.filter(x => x.dentroCarencia === crit.dentroCarencia);
+  if (crit.temTempo !== undefined)       r = r.filter(x => x.temTempo === crit.temTempo);
+  if (crit.klabinOrigem) r = r.filter(x => x.klabinOrigem === crit.klabinOrigem);
+  if (crit.cliente)      r = r.filter(x => x.cliente === crit.cliente);
+  if (crit.smCodigo)     r = r.filter(x => x.smCodigo === crit.smCodigo);
+  if (crit.smCodigos)    r = r.filter(x => crit.smCodigos.includes(x.smCodigo));
+  if (crit.vinculo)      r = r.filter(x => x.vinculo === crit.vinculo);
+  return r;
+}
+
+// Abre o modal de detalhe para um critério. Se o critério tiver
+// filial/tipo, também aplica esses filtros ao painel inteiro.
+function abrirDetalhe(crit, titulo){
+  if (!REGISTROS_TODOS.length){
+    renderModalDetalhe(titulo, [], true);
+    return;
+  }
+  if (crit.filial){ const sf=document.getElementById('sf'); if(sf && sf.value!==crit.filial){ sf.value=crit.filial; re(); } }
+  if (crit.tipo && crit.tipo!=='TODOS'){ const st=document.getElementById('st'); if(st && st.value!==crit.tipo){ st.value=crit.tipo; re(); } }
+
+  if (crit.viagens){
+    // Caso especial: agrupar por código de SM (1 linha por viagem).
+    const base = baseRegs().filter(r => crit.filial ? r.filial===crit.filial : true);
+    const porSM = {};
+    base.forEach(r => {
+      if (!r.smCodigo) return;
+      if (!porSM[r.smCodigo]) porSM[r.smCodigo] = { smCodigo:r.smCodigo, filial:r.filial, placa:r.placa, coletas:0, entregas:0 };
+      if (r.tipo==='COLETA') porSM[r.smCodigo].coletas++; else if (r.tipo==='ENTREGA') porSM[r.smCodigo].entregas++;
+    });
+    renderModalViagens(titulo, Object.values(porSM));
+    return;
+  }
+
+  const linhas = filtrarPorCriterios(baseRegs(), crit);
+  renderModalDetalhe(titulo, linhas);
+}
+
+function renderModalDetalhe(titulo, linhas, semDados){
+  const modal = document.getElementById('detalhe-modal');
+  const body  = document.getElementById('detalhe-body');
+  const tit   = document.getElementById('detalhe-titulo');
+  const sub   = document.getElementById('detalhe-sub');
+  if (!modal || !body) return;
+  if (tit) tit.textContent = titulo;
+
+  if (semDados){
+    if (sub) sub.textContent = 'Sem dados carregados';
+    body.innerHTML = `<div class="mc-empty"><i class="ti ti-file-upload" style="font-size:20px" aria-hidden="true"></i><br>Carregue uma planilha para ver o detalhe por registro.</div>`;
+    modal.classList.add('open');
+    return;
+  }
+
+  if (sub) sub.textContent = `${fmt(linhas.length)} registro${linhas.length===1?'':'s'} encontrado${linhas.length===1?'':'s'}`;
+  if (!linhas.length){
+    body.innerHTML = `<div class="mc-empty"><i class="ti ti-mood-empty" style="font-size:20px" aria-hidden="true"></i><br>Nenhum registro encontrado para esse filtro.</div>`;
+  } else {
+    const mostrar = linhas.slice(0, 500);
+    body.innerHTML = `<table class="mc-table"><thead><tr>
+      <th>SM</th><th>Filial</th><th>Tipo</th><th>Placa</th><th>Vínculo</th><th>Status chegada</th><th>Permanência</th>
+    </tr></thead><tbody>${mostrar.map(r => `<tr>
+      <td>${r.smCodigo||'—'}</td>
+      <td>${r.filial}</td>
+      <td>${r.tipo}</td>
+      <td>${r.placa||'—'}</td>
+      <td>${r.vinculo||'—'}</td>
+      <td>${r.statusChegada||'—'}</td>
+      <td>${r.temTempo && typeof hhmm==='function' ? hhmm(r.perm) : '—'}</td>
+    </tr>`).join('')}</tbody></table>
+    ${linhas.length>500 ? `<div class="cnote" style="padding:10px 4px"><i class="ti ti-info-circle" aria-hidden="true"></i>Mostrando os primeiros 500 de ${fmt(linhas.length)} registros.</div>` : ''}`;
+  }
+  modal.classList.add('open');
+}
+
+function renderModalViagens(titulo, viagens){
+  const modal = document.getElementById('detalhe-modal');
+  const body  = document.getElementById('detalhe-body');
+  const tit   = document.getElementById('detalhe-titulo');
+  const sub   = document.getElementById('detalhe-sub');
+  if (!modal || !body) return;
+  if (tit) tit.textContent = titulo;
+  if (sub) sub.textContent = `${fmt(viagens.length)} viagem${viagens.length===1?'':'s'} encontrada${viagens.length===1?'':'s'}`;
+  if (!viagens.length){
+    body.innerHTML = `<div class="mc-empty"><i class="ti ti-mood-empty" style="font-size:20px" aria-hidden="true"></i><br>Nenhuma viagem encontrada.</div>`;
+  } else {
+    const mostrar = viagens.slice(0,500);
+    body.innerHTML = `<table class="mc-table"><thead><tr>
+      <th>Código SM</th><th>Filial</th><th>Placa</th><th>Coletas</th><th>Entregas</th>
+    </tr></thead><tbody>${mostrar.map(v=>`<tr>
+      <td>${v.smCodigo}</td><td>${v.filial}</td><td>${v.placa||'—'}</td>
+      <td>${v.coletas}${v.coletas>1?' <span class="mc-badge">2+</span>':''}</td><td>${v.entregas}</td>
+    </tr>`).join('')}</tbody></table>
+    ${viagens.length>500?`<div class="cnote" style="padding:10px 4px"><i class="ti ti-info-circle" aria-hidden="true"></i>Mostrando as primeiras 500 de ${fmt(viagens.length)} viagens.</div>`:''}`;
+  }
+  modal.classList.add('open');
+}
+
+function fecharDetalhe(){
+  const modal = document.getElementById('detalhe-modal');
+  if (modal) modal.classList.remove('open');
+}
 
 // Reaplica vínculo, placa e período sobre REGISTROS_TODOS, reagrega
 // e re-renderiza. Filial/Tipo/Ocorrência continuam sendo aplicados
@@ -34,6 +163,7 @@ function aplicarFiltrosAvancados(){
   }
 
   aplicarDados(agregarRegistros(regs));
+  REGISTROS_ATIVOS = regs;
   re();
 
   const chip = document.getElementById('fchip');
@@ -126,7 +256,7 @@ function hb1(id,labels,data,cor){const c=cs();kill(id);CH[id]=new Chart(document
 function bAg(id,labels,ds){const c=cs();kill(id);CH[id]=new Chart(document.getElementById(id),{type:'bar',data:{labels,datasets:ds},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:tt(c)},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:30,autoSkip:false}},y:sc(c)}}})}
 function mkLeg(id,items){document.getElementById(id).innerHTML=items.map(([l,c])=>`<span><span class="ld" style="background:${c}"></span>${l}</span>`).join('');}
 
-function kpiHtml(k){return `<div class="kpi ${k.k}"><i class="ti ${k.ic} ki" aria-hidden="true" style="color:${k.c}"></i><div class="kl">${k.l}</div><div class="kv" style="color:${k.c}">${k.v}</div><div class="ks">${k.s}</div><div class="kb"><div class="kbf" style="width:${k.w}%;background:${k.c}"></div></div></div>`;}
+function kpiHtml(k){return `<div class="kpi ${k.k}"${critAttr(k.crit,k.tit||k.l)}><i class="ti ${k.ic} ki" aria-hidden="true" style="color:${k.c}"></i><div class="kl">${k.l}</div><div class="kv" style="color:${k.c}">${k.v}</div><div class="ks">${k.s}</div><div class="kb"><div class="kbf" style="width:${k.w}%;background:${k.c}"></div></div></div>`;}
 
 // ── Render principal ───────────────────────────────────────
 function re(){
@@ -139,10 +269,34 @@ function re(){
   const resumoAtual = (fil === 'TODAS') ? RESUMO : (RESUMO_POR_FILIAL[fil] || {viagens:0,coletas:0,entregas:0,total:0});
   const rg = document.getElementById('resumo-global');
   if (rg) rg.innerHTML = [
-    { ic:'ti-route',            c:'#FFB300', val:fmt(resumoAtual.viagens),  lbl:'Total de viagens (SM)' },
-    { ic:'ti-package-import',   c:CORES.coletas,  val:fmt(resumoAtual.coletas),  lbl:'Total de coletas' },
-    { ic:'ti-package-export',   c:CORES.entregas, val:fmt(resumoAtual.entregas), lbl:'Total de entregas' },
-  ].map(r => `<div class="resumo-card"><div class="resumo-icon" style="background:${r.c}22"><i class="ti ${r.ic}" style="color:${r.c};font-size:19px" aria-hidden="true"></i></div><div><div class="resumo-val" style="color:${r.c}">${r.val}</div><div class="resumo-lbl">${r.lbl}</div></div></div>`).join('');
+    { ic:'ti-route',            c:'#FFB300', val:fmt(resumoAtual.viagens),  lbl:'Total de viagens (SM)',
+      crit:{ filial: fil!=='TODAS'?fil:undefined, viagens:true }, tit:'Viagens' + (fil!=='TODAS'?' — '+fil:'') },
+    { ic:'ti-package-import',   c:CORES.coletas,  val:fmt(resumoAtual.coletas),  lbl:'Total de coletas',
+      crit:{ filial: fil!=='TODAS'?fil:undefined, tipo:'COLETA' }, tit:'Coletas' + (fil!=='TODAS'?' — '+fil:'') },
+    { ic:'ti-package-export',   c:CORES.entregas, val:fmt(resumoAtual.entregas), lbl:'Total de entregas',
+      crit:{ filial: fil!=='TODAS'?fil:undefined, tipo:'ENTREGA' }, tit:'Entregas' + (fil!=='TODAS'?' — '+fil:'') },
+  ].map(r => `<div class="resumo-card"${critAttr(r.crit,r.tit)}><div class="resumo-icon" style="background:${r.c}22"><i class="ti ${r.ic}" style="color:${r.c};font-size:19px" aria-hidden="true"></i></div><div><div class="resumo-val" style="color:${r.c}">${r.val}</div><div class="resumo-lbl">${r.lbl}</div></div></div>`).join('');
+
+  // ── Viagens com mais de 1 coleta (respeitando filtro de filial) ──
+  const mcWrap = document.getElementById('multi-coleta-wrap');
+  if (mcWrap){
+    const lista = (fil === 'TODAS') ? VIAGENS_MULTI_COLETA : VIAGENS_MULTI_COLETA.filter(v => v.filial === fil);
+    if (!lista.length){
+      mcWrap.innerHTML = `<div class="mc-empty"><i class="ti ti-circle-check" style="font-size:16px;color:${CORES.noPrazo}" aria-hidden="true"></i><br>Nenhuma viagem com mais de 1 coleta ${fil==='TODAS'?'no total':'em '+fil}.</div>`;
+    } else {
+      mcWrap.innerHTML = `<table class="mc-table"><thead><tr>
+        <th>Código SM</th><th>Filial</th><th>Placa</th><th>Coletas</th><th>Entregas</th><th>Origens (coleta)</th><th>Destinos (entrega)</th>
+      </tr></thead><tbody>${lista.map(v => `<tr${critAttr({smCodigo:v.smCodigo}, 'Viagem SM '+v.smCodigo)}>
+        <td>${v.smCodigo}</td>
+        <td>${v.filial}</td>
+        <td>${v.placa}</td>
+        <td><span class="mc-badge">${v.numColetas}</span></td>
+        <td>${v.numEntregas}</td>
+        <td>${v.origens.join(', ')}</td>
+        <td>${v.destinos.join(', ') || '—'}</td>
+      </tr>`).join('')}</tbody></table>`;
+    }
+  }
   const occ = document.getElementById('socc')?.value||'TODAS';
   const dtIni = document.getElementById('dt-ini')?.value||'';
   const dtFim = document.getElementById('dt-fim')?.value||'';
@@ -162,14 +316,15 @@ function re(){
   const CC=[P.foraDoPrazo,P.noPrazo,P.aberturaForaPrazo,P.poligonoIncorreto,P.cancelada];
 
   // ── VISÃO GERAL ──
+  const cbGeral = { filial: fil!=='TODAS'?fil:undefined, tipo: tipo!=='TODOS'?tipo:undefined };
   document.getElementById('kce-geral').innerHTML=[
-    {k:'np',  ic:'ti-circle-check',  l:'No prazo',    v:fmt(d.np),  s:`${pct(d.np,T)}% do total`,  c:P.noPrazo,     w:pct(d.np,T)},
-    {k:'fp',  ic:'ti-alert-circle',  l:'Fora do prazo',v:fmt(d.fp), s:`${pct(d.fp,T)}% do total`,  c:P.foraDoPrazo, w:pct(d.fp,T)},
-    {k:'col', ic:'ti-package-import',l:'Coletas',      v:fmt(d.col), s:'registros',                 c:P.coletas,     w:Math.min(100,Math.round(d.col/200))},
-    {k:'ent', ic:'ti-package-export',l:'Entregas',     v:fmt(d.ent), s:'registros',                 c:P.entregas,    w:Math.min(100,Math.round(d.ent/200))},
+    {k:'np',  ic:'ti-circle-check',  l:'No prazo',    v:fmt(d.np),  s:`${pct(d.np,T)}% do total`,  c:P.noPrazo,     w:pct(d.np,T), crit:{...cbGeral, smCategoria:'np'}, tit:'No prazo'},
+    {k:'fp',  ic:'ti-alert-circle',  l:'Fora do prazo',v:fmt(d.fp), s:`${pct(d.fp,T)}% do total`,  c:P.foraDoPrazo, w:pct(d.fp,T), crit:{...cbGeral, smCategoria:'fp'}, tit:'Fora do prazo'},
+    {k:'col', ic:'ti-package-import',l:'Coletas',      v:fmt(d.col), s:'registros',                 c:P.coletas,     w:Math.min(100,Math.round(d.col/200)), crit:{filial:cbGeral.filial, tipo:'COLETA'}, tit:'Coletas'},
+    {k:'ent', ic:'ti-package-export',l:'Entregas',     v:fmt(d.ent), s:'registros',                 c:P.entregas,    w:Math.min(100,Math.round(d.ent/200)), crit:{filial:cbGeral.filial, tipo:'ENTREGA'}, tit:'Entregas'},
     {k:'alvo',ic:'ti-target',        l:'Dentro do alvo',v:fmt(13694),s:'81,8% das viagens',         c:P.dentroAlvo,  w:82},
     {k:'saida',ic:'ti-logout',       l:'Saída no prazo',v:fmt(8069), s:'46,6% das saídas',          c:'#AB47BC',     w:47},
-    {k:'tot', ic:'ti-sum',           l:'Total',         v:fmt(T),    s:'período selecionado',       c:'#FFD600',     w:100},
+    {k:'tot', ic:'ti-sum',           l:'Total',         v:fmt(T),    s:'período selecionado',       c:'#FFD600',     w:100, crit:cbGeral, tit:'Total'},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-ch',[[`Fora prazo ${pct(d.fp,T)}%`,P.foraDoPrazo],[`No prazo ${pct(d.np,T)}%`,P.noPrazo],[`Abertura SM FP ${pct(d.afp,T)}%`,P.aberturaForaPrazo],[`Polígono ${pct(d.pol,T)}%`,P.poligonoIncorreto]]);
@@ -188,19 +343,20 @@ function re(){
 
   // ── COLETAS ──
   const dc=calcTipo('COLETA', fil);
+  const cbCol = { filial: fil!=='TODAS'?fil:undefined, tipo:'COLETA' };
   document.getElementById('bs-coletas').innerHTML=[
-    {c:P.coletas,   ic:'ti-package-import', val:fmt(dc.vol),  lbl:'Total de coletas',      sub:'registros no período'},
-    {c:P.noPrazo,   ic:'ti-circle-check',   val:fmt(dc.np),   lbl:'Coletas no prazo',      sub:`${pct(dc.np,dc.T)}% das coletas`},
-    {c:P.foraDoPrazo,ic:'ti-alert-circle',  val:fmt(dc.fp),   lbl:'Coletas fora do prazo', sub:`${pct(dc.fp,dc.T)}% das coletas`},
+    {c:P.coletas,   ic:'ti-package-import', val:fmt(dc.vol),  lbl:'Total de coletas',      sub:'registros no período', crit:cbCol, tit:'Coletas'},
+    {c:P.noPrazo,   ic:'ti-circle-check',   val:fmt(dc.np),   lbl:'Coletas no prazo',      sub:`${pct(dc.np,dc.T)}% das coletas`, crit:{...cbCol,smCategoria:'np'}, tit:'Coletas no prazo'},
+    {c:P.foraDoPrazo,ic:'ti-alert-circle',  val:fmt(dc.fp),   lbl:'Coletas fora do prazo', sub:`${pct(dc.fp,dc.T)}% das coletas`, crit:{...cbCol,smCategoria:'fp'}, tit:'Coletas fora do prazo'},
     {c:P.dentroAlvo,ic:'ti-target',         val:`${pct(dc.np,dc.T)}%`,lbl:'Taxa de pontualidade',sub:'coletas no prazo'},
-  ].map(b=>`<div class="big-stat"><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`).join('');
+  ].map(bigStatHtml).join('');
 
   document.getElementById('kce-coletas').innerHTML=[
-    {k:'np', ic:'ti-circle-check', l:'No prazo',    v:fmt(dc.np),  s:`${pct(dc.np,dc.T)}%`,  c:P.noPrazo,     w:pct(dc.np,dc.T)},
-    {k:'fp', ic:'ti-alert-circle', l:'Fora do prazo',v:fmt(dc.fp), s:`${pct(dc.fp,dc.T)}%`,  c:P.foraDoPrazo, w:pct(dc.fp,dc.T)},
-    {k:'afp',ic:'ti-clock-x',      l:'Abertura SM FP',v:fmt(dc.afp),s:`${pct(dc.afp,dc.T)}%`,c:P.aberturaForaPrazo,w:pct(dc.afp,dc.T)},
-    {k:'pol',ic:'ti-map-search',   l:'Polígono incor.',v:fmt(dc.pol),s:`${pct(dc.pol,dc.T)}%`,c:P.poligonoIncorreto,w:pct(dc.pol,dc.T)},
-    {k:'can',ic:'ti-ban',          l:'Canceladas',  v:fmt(dc.can), s:`${pct(dc.can,dc.T)}%`,  c:P.cancelada,   w:pct(dc.can,dc.T)},
+    {k:'np', ic:'ti-circle-check', l:'No prazo',    v:fmt(dc.np),  s:`${pct(dc.np,dc.T)}%`,  c:P.noPrazo,     w:pct(dc.np,dc.T), crit:{...cbCol,smCategoria:'np'}, tit:'Coletas no prazo'},
+    {k:'fp', ic:'ti-alert-circle', l:'Fora do prazo',v:fmt(dc.fp), s:`${pct(dc.fp,dc.T)}%`,  c:P.foraDoPrazo, w:pct(dc.fp,dc.T), crit:{...cbCol,smCategoria:'fp'}, tit:'Coletas fora do prazo'},
+    {k:'afp',ic:'ti-clock-x',      l:'Abertura SM FP',v:fmt(dc.afp),s:`${pct(dc.afp,dc.T)}%`,c:P.aberturaForaPrazo,w:pct(dc.afp,dc.T), crit:{...cbCol,smCategoria:'afp'}, tit:'Abertura SM Fora do Prazo — Coleta'},
+    {k:'pol',ic:'ti-map-search',   l:'Polígono incor.',v:fmt(dc.pol),s:`${pct(dc.pol,dc.T)}%`,c:P.poligonoIncorreto,w:pct(dc.pol,dc.T), crit:{...cbCol,smCategoria:'pol'}, tit:'Polígono Incorreto — Coleta'},
+    {k:'can',ic:'ti-ban',          l:'Canceladas',  v:fmt(dc.can), s:`${pct(dc.can,dc.T)}%`,  c:P.cancelada,   w:pct(dc.can,dc.T), crit:{...cbCol,smCategoria:'can'}, tit:'Coletas Canceladas'},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-col-ch',[[`No prazo ${pct(dc.np,dc.T)}%`,P.noPrazo],[`Fora prazo ${pct(dc.fp,dc.T)}%`,P.foraDoPrazo],[`Abertura SM FP ${pct(dc.afp,dc.T)}%`,P.aberturaForaPrazo],[`Polígono ${pct(dc.pol,dc.T)}%`,P.poligonoIncorreto]]);
@@ -212,19 +368,20 @@ function re(){
 
   // ── ENTREGAS ──
   const de=calcTipo('ENTREGA', fil);
+  const cbEnt = { filial: fil!=='TODAS'?fil:undefined, tipo:'ENTREGA' };
   document.getElementById('bs-entregas').innerHTML=[
-    {c:P.entregas,  ic:'ti-package-export', val:fmt(de.vol),  lbl:'Total de entregas',      sub:'registros no período'},
-    {c:P.noPrazo,   ic:'ti-circle-check',   val:fmt(de.np),   lbl:'Entregas no prazo',      sub:`${pct(de.np,de.T)}% das entregas`},
-    {c:P.foraDoPrazo,ic:'ti-alert-circle',  val:fmt(de.fp),   lbl:'Entregas fora do prazo', sub:`${pct(de.fp,de.T)}% das entregas`},
+    {c:P.entregas,  ic:'ti-package-export', val:fmt(de.vol),  lbl:'Total de entregas',      sub:'registros no período', crit:cbEnt, tit:'Entregas'},
+    {c:P.noPrazo,   ic:'ti-circle-check',   val:fmt(de.np),   lbl:'Entregas no prazo',      sub:`${pct(de.np,de.T)}% das entregas`, crit:{...cbEnt,smCategoria:'np'}, tit:'Entregas no prazo'},
+    {c:P.foraDoPrazo,ic:'ti-alert-circle',  val:fmt(de.fp),   lbl:'Entregas fora do prazo', sub:`${pct(de.fp,de.T)}% das entregas`, crit:{...cbEnt,smCategoria:'fp'}, tit:'Entregas fora do prazo'},
     {c:P.dentroAlvo,ic:'ti-target',         val:`${pct(de.np,de.T)}%`,lbl:'Taxa de pontualidade',sub:'entregas no prazo'},
-  ].map(b=>`<div class="big-stat"><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`).join('');
+  ].map(bigStatHtml).join('');
 
   document.getElementById('kce-entregas').innerHTML=[
-    {k:'np', ic:'ti-circle-check', l:'No prazo',    v:fmt(de.np),  s:`${pct(de.np,de.T)}%`,  c:P.noPrazo,     w:pct(de.np,de.T)},
-    {k:'fp', ic:'ti-alert-circle', l:'Fora do prazo',v:fmt(de.fp), s:`${pct(de.fp,de.T)}%`,  c:P.foraDoPrazo, w:pct(de.fp,de.T)},
-    {k:'afp',ic:'ti-clock-x',      l:'Abertura SM FP',v:fmt(de.afp),s:`${pct(de.afp,de.T)}%`,c:P.aberturaForaPrazo,w:pct(de.afp,de.T)},
-    {k:'pol',ic:'ti-map-search',   l:'Polígono incor.',v:fmt(de.pol),s:`${pct(de.pol,de.T)}%`,c:P.poligonoIncorreto,w:pct(de.pol,de.T)},
-    {k:'can',ic:'ti-ban',          l:'Canceladas',  v:fmt(de.can), s:`${pct(de.can,de.T)}%`,  c:P.cancelada,   w:pct(de.can,de.T)},
+    {k:'np', ic:'ti-circle-check', l:'No prazo',    v:fmt(de.np),  s:`${pct(de.np,de.T)}%`,  c:P.noPrazo,     w:pct(de.np,de.T), crit:{...cbEnt,smCategoria:'np'}, tit:'Entregas no prazo'},
+    {k:'fp', ic:'ti-alert-circle', l:'Fora do prazo',v:fmt(de.fp), s:`${pct(de.fp,de.T)}%`,  c:P.foraDoPrazo, w:pct(de.fp,de.T), crit:{...cbEnt,smCategoria:'fp'}, tit:'Entregas fora do prazo'},
+    {k:'afp',ic:'ti-clock-x',      l:'Abertura SM FP',v:fmt(de.afp),s:`${pct(de.afp,de.T)}%`,c:P.aberturaForaPrazo,w:pct(de.afp,de.T), crit:{...cbEnt,smCategoria:'afp'}, tit:'Abertura SM Fora do Prazo — Entrega'},
+    {k:'pol',ic:'ti-map-search',   l:'Polígono incor.',v:fmt(de.pol),s:`${pct(de.pol,de.T)}%`,c:P.poligonoIncorreto,w:pct(de.pol,de.T), crit:{...cbEnt,smCategoria:'pol'}, tit:'Polígono Incorreto — Entrega'},
+    {k:'can',ic:'ti-ban',          l:'Canceladas',  v:fmt(de.can), s:`${pct(de.can,de.T)}%`,  c:P.cancelada,   w:pct(de.can,de.T), crit:{...cbEnt,smCategoria:'can'}, tit:'Entregas Canceladas'},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-ent-ch',[[`No prazo ${pct(de.np,de.T)}%`,P.noPrazo],[`Fora prazo ${pct(de.fp,de.T)}%`,P.foraDoPrazo],[`Abertura SM FP ${pct(de.afp,de.T)}%`,P.aberturaForaPrazo],[`Polígono ${pct(de.pol,de.T)}%`,P.poligonoIncorreto]]);
@@ -244,7 +401,7 @@ function re(){
       {l:'Abertura SM FP',v:pd.afp,c:P.aberturaForaPrazo},
       {l:'Polígono',v:pd.pol,c:P.poligonoIncorreto},
     ];
-    return `<div class="filial-row">
+    return `<div class="filial-row"${critAttr({filial:f, tipo:cbGeral.tipo}, f)}>
       <div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(ft)} registros</span></div>
       <div class="filial-bars">${bars.map(b=>`<div class="fbar-item">
         <span class="fbar-label">${b.l}</span>
@@ -266,12 +423,13 @@ function re(){
   const totalCan = d.fils.reduce((s,f)=>s+d.pf[f].can,0);
   const totalIncons = totalAfp + totalPol + totalCan;
 
+  const cbSM = { filial: fil!=='TODAS'?fil:undefined, tipo: tipo!=='TODOS'?tipo:undefined };
   document.getElementById('incons-cards').innerHTML=[
-    {c:P.aberturaForaPrazo,ic:'ti-clock-x',       lbl:'Abertura SM Fora do Prazo', val:fmt(totalAfp), sub:`${pct(totalAfp,T)}% do total · SM efetivada tardiamente`,  bw:pct(totalAfp,T)},
-    {c:P.poligonoIncorreto,ic:'ti-map-search',    lbl:'Polígono incorreto',        val:fmt(totalPol), sub:`${pct(totalPol,T)}% do total · Veículo fora da área`,         bw:pct(totalPol,T)},
-    {c:P.cancelada,        ic:'ti-ban',           lbl:'Canceladas',                val:fmt(totalCan), sub:`${pct(totalCan,T)}% do total · SMs canceladas`,               bw:pct(totalCan,T)},
-    {c:'#E91E63',          ic:'ti-alert-triangle',lbl:'Total de inconsistências',  val:fmt(totalIncons),sub:`${pct(totalIncons,T)}% do total de registros`,              bw:pct(totalIncons,T)},
-  ].map(c=>`<div class="incons-card" style="--glow-color:${c.c};border-top-color:${c.c}">
+    {c:P.aberturaForaPrazo,ic:'ti-clock-x',       lbl:'Abertura SM Fora do Prazo', val:fmt(totalAfp), sub:`${pct(totalAfp,T)}% do total · SM efetivada tardiamente`,  bw:pct(totalAfp,T), crit:{...cbSM,smCategoria:'afp'}, tit:'Abertura SM Fora do Prazo'},
+    {c:P.poligonoIncorreto,ic:'ti-map-search',    lbl:'Polígono incorreto',        val:fmt(totalPol), sub:`${pct(totalPol,T)}% do total · Veículo fora da área`,         bw:pct(totalPol,T), crit:{...cbSM,smCategoria:'pol'}, tit:'Polígono Incorreto'},
+    {c:P.cancelada,        ic:'ti-ban',           lbl:'Canceladas',                val:fmt(totalCan), sub:`${pct(totalCan,T)}% do total · SMs canceladas`,               bw:pct(totalCan,T), crit:{...cbSM,smCategoria:'can'}, tit:'Canceladas'},
+    {c:'#E91E63',          ic:'ti-alert-triangle',lbl:'Total de inconsistências',  val:fmt(totalIncons),sub:`${pct(totalIncons,T)}% do total de registros`,              bw:pct(totalIncons,T), crit:{...cbSM,smCategorias:['afp','pol','can']}, tit:'Total de inconsistências'},
+  ].map(c=>`<div class="incons-card"${critAttr(c.crit,c.tit)} style="--glow-color:${c.c};border-top-color:${c.c}">
     <i class="ti ${c.ic} incons-icon" aria-hidden="true" style="color:${c.c}"></i>
     <div class="incons-lbl">${c.lbl}</div>
     <div class="incons-val" style="color:${c.c}">${c.val}</div>
@@ -280,12 +438,12 @@ function re(){
   </div>`).join('');
 
   document.getElementById('ksm').innerHTML=[
-    {k:'afp',ic:'ti-clock-x',    l:'Abertura SM FP',      v:fmt(totalAfp), s:`${pct(totalAfp,T)}%`,    c:P.aberturaForaPrazo, w:pct(totalAfp,T)},
-    {k:'pol',ic:'ti-map-search', l:'Polígono incorreto',  v:fmt(totalPol), s:`${pct(totalPol,T)}%`,    c:P.poligonoIncorreto, w:pct(totalPol,T)},
-    {k:'can',ic:'ti-ban',        l:'Canceladas',          v:fmt(totalCan), s:`${pct(totalCan,T)}%`,    c:P.cancelada,         w:pct(totalCan,T)},
-    {k:'np', ic:'ti-circle-check',l:'SM abertas no prazo',v:fmt(d.np),    s:`${pct(d.np,T)}% do total`,c:P.noPrazo,           w:pct(d.np,T)},
-    {k:'fp', ic:'ti-alert-circle',l:'Chegada fora prazo', v:fmt(d.fp),    s:`${pct(d.fp,T)}% do total`,c:P.foraDoPrazo,       w:pct(d.fp,T)},
-    {k:'tot',ic:'ti-sum',        l:'Total',               v:fmt(T),       s:'período',                 c:'#FFD600',           w:100},
+    {k:'afp',ic:'ti-clock-x',    l:'Abertura SM FP',      v:fmt(totalAfp), s:`${pct(totalAfp,T)}%`,    c:P.aberturaForaPrazo, w:pct(totalAfp,T), crit:{...cbSM,smCategoria:'afp'}, tit:'Abertura SM Fora do Prazo'},
+    {k:'pol',ic:'ti-map-search', l:'Polígono incorreto',  v:fmt(totalPol), s:`${pct(totalPol,T)}%`,    c:P.poligonoIncorreto, w:pct(totalPol,T), crit:{...cbSM,smCategoria:'pol'}, tit:'Polígono Incorreto'},
+    {k:'can',ic:'ti-ban',        l:'Canceladas',          v:fmt(totalCan), s:`${pct(totalCan,T)}%`,    c:P.cancelada,         w:pct(totalCan,T), crit:{...cbSM,smCategoria:'can'}, tit:'Canceladas'},
+    {k:'np', ic:'ti-circle-check',l:'SM abertas no prazo',v:fmt(d.np),    s:`${pct(d.np,T)}% do total`,c:P.noPrazo,           w:pct(d.np,T), crit:{...cbSM,smCategoria:'np'}, tit:'SM abertas no prazo'},
+    {k:'fp', ic:'ti-alert-circle',l:'Chegada fora prazo', v:fmt(d.fp),    s:`${pct(d.fp,T)}% do total`,c:P.foraDoPrazo,       w:pct(d.fp,T), crit:{...cbSM,smCategoria:'fp'}, tit:'Chegada fora do prazo'},
+    {k:'tot',ic:'ti-sum',        l:'Total',               v:fmt(T),       s:'período',                 c:'#FFD600',           w:100, crit:cbSM, tit:'Total'},
   ].map(kpiHtml).join('');
 
   mkLeg('lg-sm',[[`Abertura SM FP ${pct(totalAfp,T)}%`,P.aberturaForaPrazo],[`Polígono incor. ${pct(totalPol,T)}%`,P.poligonoIncorreto],[`Canceladas ${pct(totalCan,T)}%`,P.cancelada],[`No prazo ${pct(d.np,T)}%`,P.noPrazo]]);
@@ -298,11 +456,11 @@ function re(){
   ]);
 
   document.getElementById('crz').innerHTML=[
-    {t:'Abertura SM Fora do Prazo',  v:fmt(totalAfp), p:`${pct(totalAfp,T)}%`, bc:P.aberturaForaPrazo, vc:P.aberturaForaPrazo, bb:dark?'rgba(251,140,0,.12)':'#FEF3E0', bt:dark?'#FB8C00':'#7A3E00'},
-    {t:'Polígono incorreto',          v:fmt(totalPol), p:`${pct(totalPol,T)}%`, bc:P.poligonoIncorreto, vc:P.poligonoIncorreto, bb:dark?'rgba(124,131,224,.12)':'#ECEEFE',bt:dark?'#7C83E0':'#2C3483'},
-    {t:'Canceladas',                  v:fmt(totalCan), p:`${pct(totalCan,T)}%`, bc:P.cancelada,         vc:P.cancelada,         bb:dark?'rgba(96,125,139,.12)':'#ECEFF1', bt:dark?'#607D8B':'#37474F'},
-    {t:'SM abertas no prazo',         v:fmt(d.np),     p:`${pct(d.np,T)}%`,     bc:P.noPrazo,           vc:P.noPrazo,           bb:dark?'rgba(0,191,165,.12)':'#D6F5F0',  bt:dark?'#00BFA5':'#005E52'},
-  ].map(c=>`<div class="cc" style="border-top-color:${c.bc}"><div class="cct">${c.t}</div><div class="ccv" style="color:${c.vc}">${c.v}</div><span class="bdg" style="background:${c.bb};color:${c.bt}">${c.p}</span></div>`).join('');
+    {t:'Abertura SM Fora do Prazo',  v:fmt(totalAfp), p:`${pct(totalAfp,T)}%`, bc:P.aberturaForaPrazo, vc:P.aberturaForaPrazo, bb:dark?'rgba(251,140,0,.12)':'#FEF3E0', bt:dark?'#FB8C00':'#7A3E00', crit:{...cbSM,smCategoria:'afp'}},
+    {t:'Polígono incorreto',          v:fmt(totalPol), p:`${pct(totalPol,T)}%`, bc:P.poligonoIncorreto, vc:P.poligonoIncorreto, bb:dark?'rgba(124,131,224,.12)':'#ECEEFE',bt:dark?'#7C83E0':'#2C3483', crit:{...cbSM,smCategoria:'pol'}},
+    {t:'Canceladas',                  v:fmt(totalCan), p:`${pct(totalCan,T)}%`, bc:P.cancelada,         vc:P.cancelada,         bb:dark?'rgba(96,125,139,.12)':'#ECEFF1', bt:dark?'#607D8B':'#37474F', crit:{...cbSM,smCategoria:'can'}},
+    {t:'SM abertas no prazo',         v:fmt(d.np),     p:`${pct(d.np,T)}%`,     bc:P.noPrazo,           vc:P.noPrazo,           bb:dark?'rgba(0,191,165,.12)':'#D6F5F0',  bt:dark?'#00BFA5':'#005E52', crit:{...cbSM,smCategoria:'np'}},
+  ].map(c=>`<div class="cc"${critAttr(c.crit,c.t)} style="border-top-color:${c.bc}"><div class="cct">${c.t}</div><div class="ccv" style="color:${c.vc}">${c.v}</div><span class="bdg" style="background:${c.bb};color:${c.bt}">${c.p}</span></div>`).join('');
 
   if (typeof renderPermanencia === 'function') renderPermanencia(fil, tipo);
 }
@@ -369,6 +527,7 @@ function handleFile(file) {
 
   lerPlanilha(file, function(dados){
     REGISTROS_TODOS = dados._registros || [];
+    REGISTROS_ATIVOS = REGISTROS_TODOS;
     aplicarDados(dados);
     const badge = document.getElementById('fn');
     if (badge) badge.textContent = file.name + '  ·  ' + dados.totalValidos.toLocaleString('pt-BR') + ' reg.';
@@ -680,28 +839,29 @@ function subAbaPerm(t){
 }
 
 function bigStatHtml(b){
-  return `<div class="big-stat"><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`;
+  return `<div class="big-stat"${critAttr(b.crit,b.tit||b.lbl)}><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`;
 }
 
 function renderCarencia(filial, tipo){
   const P=CORES, c=cs();
   const d=calcPerm(filial, tipo);
   const T=d.amostra||1;
+  const cbP = { filial: filial!=='TODAS'?filial:undefined, tipo: tipo!=='TODOS'?tipo:undefined };
   const bs=document.getElementById('bs-perm');
   if(bs) bs.innerHTML=[
-    {c:P.noPrazo,ic:'ti-circle-check',val:`${pct(d.dentro,T)}%`,lbl:'Dentro da carência',sub:`${fmt(d.dentro)} de ${fmt(T)} até 5h00`},
-    {c:P.excedente,ic:'ti-alarm',val:fmt(d.fora),lbl:'Estouros de carência',sub:`${pct(d.fora,T)}% passaram de 5h00`},
-    {c:P.foraAlvo,ic:'ti-hourglass-high',val:fmt(Math.round(d.excedente)),lbl:'Horas excedentes',sub:'estimativa além das 5h'},
-    {c:P.p90,ic:'ti-arrow-bar-to-up',val:hhmm(d.p90),lbl:'p90 (piores 10%)',sub:'10% passam disso'},
+    {c:P.noPrazo,ic:'ti-circle-check',val:`${pct(d.dentro,T)}%`,lbl:'Dentro da carência',sub:`${fmt(d.dentro)} de ${fmt(T)} até 5h00`, crit:{...cbP,dentroCarencia:true}, tit:'Dentro da carência (até 5h)'},
+    {c:P.excedente,ic:'ti-alarm',val:fmt(d.fora),lbl:'Estouros de carência',sub:`${pct(d.fora,T)}% passaram de 5h00`, crit:{...cbP,dentroCarencia:false}, tit:'Estouros de carência (acima de 5h)'},
+    {c:P.foraAlvo,ic:'ti-hourglass-high',val:fmt(Math.round(d.excedente)),lbl:'Horas excedentes',sub:'estimativa além das 5h', crit:{...cbP,dentroCarencia:false}, tit:'Registros com excedente'},
+    {c:P.p90,ic:'ti-arrow-bar-to-up',val:hhmm(d.p90),lbl:'p90 (piores 10%)',sub:'10% passam disso', crit:{...cbP,temTempo:true}, tit:'Permanência apurada (amostra completa)'},
   ].map(bigStatHtml).join('');
   const kp=document.getElementById('kperm');
   if(kp) kp.innerHTML=[
-    {k:'med',ic:'ti-clock-hour-4',l:'Mediana',v:hhmm(d.mediana),s:'caminhão do meio',c:P.mediana,w:Math.min(100,Math.round(d.mediana/CARENCIA_MIN*100))},
-    {k:'p90',ic:'ti-clock-exclamation',l:'Piores 10% (p90)',v:hhmm(d.p90),s:'limite dos piores',c:P.p90,w:Math.min(100,Math.round(d.p90/CARENCIA_MIN*100))},
-    {k:'saida',ic:'ti-calculator',l:'Média',v:hhmm(d.media),s:'puxada pela cauda',c:'#AB47BC',w:Math.min(100,Math.round(d.media/CARENCIA_MIN*100))},
+    {k:'med',ic:'ti-clock-hour-4',l:'Mediana',v:hhmm(d.mediana),s:'caminhão do meio',c:P.mediana,w:Math.min(100,Math.round(d.mediana/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada na mediana'},
+    {k:'p90',ic:'ti-clock-exclamation',l:'Piores 10% (p90)',v:hhmm(d.p90),s:'limite dos piores',c:P.p90,w:Math.min(100,Math.round(d.p90/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada no p90'},
+    {k:'saida',ic:'ti-calculator',l:'Média',v:hhmm(d.media),s:'puxada pela cauda',c:'#AB47BC',w:Math.min(100,Math.round(d.media/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada na média'},
     {k:'alvo',ic:'ti-target',l:'Carência',v:hhmm(CARENCIA_MIN),s:'5h contrato',c:P.carencia,w:100},
-    {k:'exc',ic:'ti-alarm',l:'Estouros',v:fmt(d.fora),s:`${pct(d.fora,T)}%`,c:P.excedente,w:pct(d.fora,T)},
-    {k:'tot',ic:'ti-sum',l:'Registros',v:fmt(T),s:'com tempo apurado',c:'#FFD600',w:100},
+    {k:'exc',ic:'ti-alarm',l:'Estouros',v:fmt(d.fora),s:`${pct(d.fora,T)}%`,c:P.excedente,w:pct(d.fora,T), crit:{...cbP,dentroCarencia:false}, tit:'Estouros de carência'},
+    {k:'tot',ic:'ti-sum',l:'Registros',v:fmt(T),s:'com tempo apurado',c:'#FFD600',w:100, crit:{...cbP,temTempo:true}, tit:'Registros com tempo apurado'},
   ].map(kpiHtml).join('');
   const coresFaixa=TEMPOS_FAIXAS.estouro.map(e=>e?P.excedente:P.mediana);
   mkLeg('lg-perm-faixa',[['Dentro da carência',P.mediana],['Acima de 5h00',P.excedente]]);
@@ -725,7 +885,7 @@ function renderCarencia(filial, tipo){
   if(lista) lista.innerHTML=d.fils.map(f=>{
     const pd=d.pf[f]; const tt2=pd.amostra||1;
     const bars=[{l:'Dentro 5h',v:pd.dentro,c:P.noPrazo},{l:'Acima 5h',v:pd.fora,c:P.excedente}];
-    return `<div class="filial-row"><div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(pd.amostra)} reg. · mediana ${hhmm(pd.mediana)}</span></div>
+    return `<div class="filial-row"${critAttr({...cbP, filial:f}, f)}><div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(pd.amostra)} reg. · mediana ${hhmm(pd.mediana)}</span></div>
       <div class="filial-bars">${bars.map(b=>`<div class="fbar-item"><span class="fbar-label">${b.l}</span><div class="fbar-track"><div class="fbar-fill" style="width:${pct(b.v,tt2)}%;background:${b.c}"></div></div><span class="fbar-pct" style="color:${b.c}">${pct(b.v,tt2)}%</span></div>`).join('')}</div>
       <div class="filial-kpis">
         <div class="fkpi" style="border-left-color:${P.mediana}"><div class="fkpi-l">Mediana</div><div class="fkpi-v" style="color:${P.mediana}">${hhmm(pd.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
@@ -738,14 +898,15 @@ function renderCarencia(filial, tipo){
 
 function renderTemposReais(filial){
   const P=CORES, c=cs();
+  const cbTR = { filial: filial!=='TODAS'?filial:undefined, temTempo:true };
   const medAgg=(key)=>{ const a=FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.[key]).filter(Boolean); return {med:Math.round(a.reduce((s,x)=>s+x.mediana,0)/(a.length||1)),p90:Math.round(a.reduce((s,x)=>s+x.p90,0)/(a.length||1))}; };
   const col=medAgg('coleta'), ent=medAgg('descarga');
   const bsG=document.getElementById('bs-tr-geral');
   if(bsG) bsG.innerHTML=[
-    {c:P.coletas,ic:'ti-package-import',val:hhmm(col.med),lbl:'Mediana de coleta',sub:`p90 ${hhmm(col.p90)} · tempo no ponto de carga`},
-    {c:P.entregas,ic:'ti-package-export',val:hhmm(ent.med),lbl:'Mediana de descarga',sub:`p90 ${hhmm(ent.p90)} · tempo no ponto de entrega`},
-    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(col.p90),lbl:'p90 coleta (piores 10%)',sub:'10% das coletas passam disso'},
-    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(ent.p90),lbl:'p90 descarga (piores 10%)',sub:'10% das descargas passam disso'},
+    {c:P.coletas,ic:'ti-package-import',val:hhmm(col.med),lbl:'Mediana de coleta',sub:`p90 ${hhmm(col.p90)} · tempo no ponto de carga`, crit:{...cbTR,tipo:'COLETA'}, tit:'Coletas com tempo apurado'},
+    {c:P.entregas,ic:'ti-package-export',val:hhmm(ent.med),lbl:'Mediana de descarga',sub:`p90 ${hhmm(ent.p90)} · tempo no ponto de entrega`, crit:{...cbTR,tipo:'ENTREGA'}, tit:'Entregas com tempo apurado'},
+    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(col.p90),lbl:'p90 coleta (piores 10%)',sub:'10% das coletas passam disso', crit:{...cbTR,tipo:'COLETA'}, tit:'Coletas com tempo apurado'},
+    {c:P.p90,ic:'ti-clock-exclamation',val:hhmm(ent.p90),lbl:'p90 descarga (piores 10%)',sub:'10% das descargas passam disso', crit:{...cbTR,tipo:'ENTREGA'}, tit:'Entregas com tempo apurado'},
   ].map(bigStatHtml).join('');
   mkLeg('lg-tr-filial',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas],['p90 coleta',P.coletas+'77'],['p90 descarga',P.entregas+'77']]);
   kill('c-tr-filial');
@@ -765,8 +926,8 @@ function renderTemposReais(filial){
     const worst=UNIDADES_KLABIN.reduce((w,u)=>(TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0)>(TEMPOS_UNIDADE_KLABIN[w]?.coleta?.mediana||0)?u:w,UNIDADES_KLABIN[0]);
     const worstD=TEMPOS_UNIDADE_KLABIN[worst];
     bsK.innerHTML=[
-      {c:P.coletas,ic:'ti-building-factory-2',val:hhmm(topD.coleta.mediana),lbl:top+' (maior volume)',sub:`${fmt(topD.coleta.amostra)} coletas · p90 ${hhmm(topD.coleta.p90)}`},
-      {c:P.excedente,ic:'ti-alert-triangle',val:hhmm(worstD.coleta.mediana),lbl:worst+' (maior tempo)',sub:`p90 ${hhmm(worstD.coleta.p90)}`},
+      {c:P.coletas,ic:'ti-building-factory-2',val:hhmm(topD.coleta.mediana),lbl:top+' (maior volume)',sub:`${fmt(topD.coleta.amostra)} coletas · p90 ${hhmm(topD.coleta.p90)}`, crit:{klabinOrigem:top,tipo:'COLETA',temTempo:true}, tit:'Coletas — '+top},
+      {c:P.excedente,ic:'ti-alert-triangle',val:hhmm(worstD.coleta.mediana),lbl:worst+' (maior tempo)',sub:`p90 ${hhmm(worstD.coleta.p90)}`, crit:{klabinOrigem:worst,tipo:'COLETA',temTempo:true}, tit:'Coletas — '+worst},
     ].map(bigStatHtml).join('');
   }
   mkLeg('lg-tr-klabin',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas],['p90 coleta',P.coletas+'77'],['p90 descarga',P.entregas+'77']]);
@@ -792,7 +953,7 @@ function renderTemposReais(filial){
     ]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.x)}`}}},scales:{x:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}},y:{...sc(c),ticks:{...sc(c).ticks,font:{size:9}}}}}});
   // Listas detalhadas
-  const detalhe=(u,d)=>`<div class="filial-row"><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
+  const detalhe=(u,d,tipoDim)=>`<div class="filial-row"${critAttr(tipoDim==='klabin'?{klabinOrigem:u}:{cliente:u}, u)}><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
     <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
       <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(d.coleta.mediana)}</div><div class="fkpi-s">mediana</div></div>
       <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.coleta.p90)}</div><div class="fkpi-s">piores 10%</div></div>
@@ -802,9 +963,9 @@ function renderTemposReais(filial){
       <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
     </div></div>`;
   const lK=document.getElementById('tr-klabin-list');
-  if(lK) lK.innerHTML=UNIDADES_KLABIN.map(u=>detalhe(u,TEMPOS_UNIDADE_KLABIN[u])).join('');
+  if(lK) lK.innerHTML=UNIDADES_KLABIN.map(u=>detalhe(u,TEMPOS_UNIDADE_KLABIN[u],'klabin')).join('');
   const lC=document.getElementById('tr-cliente-list');
-  if(lC) lC.innerHTML=cliSort.map(cl=>detalhe(cl,TEMPOS_CLIENTE[cl])).join('');
+  if(lC) lC.innerHTML=cliSort.map(cl=>detalhe(cl,TEMPOS_CLIENTE[cl],'cliente')).join('');
 }
 
 function renderPermanencia(filial, tipo){

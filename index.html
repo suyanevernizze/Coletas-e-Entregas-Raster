@@ -261,6 +261,13 @@
       <div class="sdiv">Cruzamento de indicadores</div>
       <div class="cgrid" id="crz"></div>
 
+      <div class="sdiv">Viagens com mais de 1 coleta <span style="font-weight:400;color:var(--txt3);font-size:11px">(exceção operacional — raro)</span></div>
+      <div class="rule" style="margin-bottom:14px">
+        Cada viagem (código de SM) normalmente tem 1 coleta e uma ou mais entregas.
+        As listadas abaixo saem desse padrão — o veículo passou por <strong>2 ou mais pontos de coleta</strong> na mesma rota.
+      </div>
+      <div id="multi-coleta-wrap"></div>
+
     </div>
 
     <!-- ═══ ABA PERMANÊNCIA ═══ -->
@@ -340,6 +347,20 @@
     </div>
   </div>
 </div>
+
+  <!-- ═══ MODAL DE DETALHE — aberto ao clicar em qualquer card ═══ -->
+  <div class="detalhe-overlay" id="detalhe-modal" onclick="if(event.target===this) fecharDetalhe()">
+    <div class="detalhe-box">
+      <div class="detalhe-head">
+        <div>
+          <div class="detalhe-titulo" id="detalhe-titulo">—</div>
+          <div class="detalhe-sub" id="detalhe-sub">—</div>
+        </div>
+        <button class="detalhe-close" onclick="fecharDetalhe()" aria-label="Fechar"><i class="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <div class="detalhe-body" id="detalhe-body"></div>
+    </div>
+  </div>
 
   <script src="parser.js"></script>
   <script src="app.js"></script>

@@ -137,20 +137,31 @@ function parseLinhas(rows){
 
     // ── Categoria de status da SM (Status chegada no local) ──
     // NO PRAZO / FORA DO PRAZO / CANCELADA / NÃO REGISTRADO.
-    // Quando NÃO REGISTRADO, a regra de negócio distingue:
-    //   < 2h entre inclusão e efetivação da SM → Abertura Fora do Prazo
-    //   >= 2h  → Polígono Incorreto (veículo saiu da área monitorada)
+    // Quando NÃO REGISTRADO:
+    //   - na COLETA, a checagem de antecedência da SM decide o motivo
+    //     (< 2h → Abertura Fora do Prazo · >= 2h → Polígono Incorreto)
+    //   - na ENTREGA, sempre vira Polígono Incorreto (o monitoramento já
+    //     está ativo desde a coleta; não registrar é sair da área monitorada)
     const statusChegada = String(r[COL.statusCheg] || '').toUpperCase().trim();
     let smCategoria = null;
     if (statusChegada === 'NO PRAZO')      smCategoria = 'np';
     else if (statusChegada === 'FORA DO PRAZO') smCategoria = 'fp';
     else if (statusChegada === 'CANCELADA')     smCategoria = 'can';
     else if (statusChegada === 'NÃO REGISTRADO'){
-      const dInc = parseDataHora(r[COL.dataInclusaoSM]);
-      const dEfe = parseDataHora(r[COL.dataEfetivacaoSM]);
-      const deltaMin = (dInc && dEfe && !ehPlaceholder(dInc) && !ehPlaceholder(dEfe))
-        ? (dEfe - dInc) / 60000 : null;
-      smCategoria = (deltaMin != null && deltaMin < 120) ? 'afp' : 'pol';
+      if (tipo === 'ENTREGA'){
+        // Na entrega, o monitoramento já vem ativo desde a coleta —
+        // "não registrado" só pode significar que saiu da área monitorada.
+        smCategoria = 'pol';
+      } else {
+        // Na coleta, a checagem de antecedência da SM decide o motivo:
+        //   < 2h entre inclusão e efetivação → Abertura Fora do Prazo
+        //   >= 2h ("efetivada no prazo")     → Polígono Incorreto
+        const dInc = parseDataHora(r[COL.dataInclusaoSM]);
+        const dEfe = parseDataHora(r[COL.dataEfetivacaoSM]);
+        const deltaMin = (dInc && dEfe && !ehPlaceholder(dInc) && !ehPlaceholder(dEfe))
+          ? (dEfe - dInc) / 60000 : null;
+        smCategoria = (deltaMin != null && deltaMin < 120) ? 'afp' : 'pol';
+      }
     }
 
     registros.push({
@@ -293,6 +304,32 @@ function agregarRegistros(registros){
     RESUMO_POR_FILIAL[f] = calcResumoSet(registros.filter(r => r.filial === f));
   });
 
+  // ── Viagens com mais de 1 coleta (caso raro/exceção operacional) ──
+  // Agrupa por código de SM e lista as que têm 2+ linhas do tipo COLETA.
+  const porSM = {};
+  registros.forEach(r => {
+    if (!r.smCodigo) return;
+    if (!porSM[r.smCodigo]) porSM[r.smCodigo] = [];
+    porSM[r.smCodigo].push(r);
+  });
+  const VIAGENS_MULTI_COLETA = Object.entries(porSM)
+    .map(([sm, regs]) => {
+      const coletas = regs.filter(r => r.tipo === 'COLETA');
+      const entregas = regs.filter(r => r.tipo === 'ENTREGA');
+      if (coletas.length < 2) return null;
+      return {
+        smCodigo: sm,
+        filial: regs[0].filial,
+        placa: [...new Set(regs.map(r=>r.placa).filter(Boolean))].join(', ') || '—',
+        numColetas: coletas.length,
+        numEntregas: entregas.length,
+        origens: [...new Set(coletas.map(r => nomeUnidade(r.origem)))],
+        destinos: [...new Set(entregas.map(r => nomeCurto(r.destino)))],
+      };
+    })
+    .filter(Boolean)
+    .sort((a,b) => b.numColetas - a.numColetas);
+
   return {
     FILIAIS: filiaisSet,
     TEMPOS, TEMPOS_FAIXAS, TEMPOS_FILIAL_TIPO,
@@ -300,6 +337,7 @@ function agregarRegistros(registros){
     CLIENTES, TEMPOS_CLIENTE,
     DADOS_BRUTOS,
     RESUMO, RESUMO_POR_FILIAL,
+    VIAGENS_MULTI_COLETA,
     totalValidos: validos.length,
     totalRegistros: registros.length,
     coletas: validos.filter(r=>r.tipo==='COLETA').length,
