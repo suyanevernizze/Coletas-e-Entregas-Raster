@@ -260,9 +260,11 @@ function agregarRegistros(registros){
   const TEMPOS_CLIENTE = {};
   CLIENTES.forEach(c => {
     const desc = stats(validos.filter(r=>r.cliente===c && r.tipo==='ENTREGA').map(r=>r.perm));
-    // coleta associada: mesma placa/rota é complexo; usamos coletas cujo destino é esse cliente
+    // Coleta só existe de fato se houver linhas de COLETA reais com destino = esse cliente
+    // (caso raro: o "cliente" na prática é um ponto de transbordo/unidade Klabin, ex: Forest Paper).
+    // Sem fallback: se não houver coleta real, fica com amostra:0 (tratado na exibição).
     const col = stats(validos.filter(r=>r.tipo==='COLETA' && nomeCurto(r.destino)===c).map(r=>r.perm));
-    TEMPOS_CLIENTE[c] = { coleta: col.amostra ? col : desc, descarga: desc };
+    TEMPOS_CLIENTE[c] = { coleta: col, descarga: desc };
   });
 
   // ── DADOS_BRUTOS (aba CE e SM) — status real da SM por filial ──

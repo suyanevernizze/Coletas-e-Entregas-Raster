@@ -941,19 +941,30 @@ function renderTemposReais(filial){
       {label:'p90 descarga',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.p90||0),backgroundColor:P.entregas+'55',borderRadius:3,borderSkipped:false},
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:35,autoSkip:false,font:{size:9}}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
-  // Clientes
+  // Clientes — só descarga (coleta não existe pra cliente, exceto raros
+  // pontos que também funcionam como unidade Klabin, ex: Forest Paper)
   const cliSort=[...CLIENTES].sort((a,b)=>(TEMPOS_CLIENTE[b]?.descarga?.mediana||0)-(TEMPOS_CLIENTE[a]?.descarga?.mediana||0));
-  mkLeg('lg-tr-cliente',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas]]);
+  mkLeg('lg-tr-cliente',[['Mediana descarga',P.entregas]]);
   kill('c-tr-cliente');
   const cvC=document.getElementById('c-tr-cliente');
   if(cvC) CH['c-tr-cliente']=new Chart(cvC,{type:'bar',
     data:{labels:cliSort,datasets:[
-      {label:'Mediana coleta',data:cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.coleta?.mediana||0),backgroundColor:P.coletas,borderRadius:3,borderSkipped:false},
       {label:'Mediana descarga',data:cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.descarga?.mediana||0),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
     ]},
     options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.x)}`}}},scales:{x:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}},y:{...sc(c),ticks:{...sc(c).ticks,font:{size:9}}}}}});
   // Listas detalhadas
-  const detalhe=(u,d,tipoDim)=>`<div class="filial-row"${critAttr(tipoDim==='klabin'?{klabinOrigem:u}:{cliente:u}, u)}><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
+  const detalhe=(u,d,tipoDim)=>{
+    const semColeta = tipoDim==='cliente' && (!d.coleta || !d.coleta.amostra);
+    const critCard = tipoDim==='klabin' ? {klabinOrigem:u} : {cliente:u};
+    if (semColeta){
+      return `<div class="filial-row"${critAttr(critCard, u)}><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.descarga.amostra)} descargas · sem coleta neste cliente</span></div>
+      <div class="filial-kpis" style="grid-template-columns:repeat(3,1fr)">
+        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga med.</div><div class="fkpi-v" style="color:${P.entregas}">${hhmm(d.descarga.mediana)}</div><div class="fkpi-s">mediana</div></div>
+        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.descarga.p90)}</div><div class="fkpi-s">piores 10%</div></div>
+        <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
+      </div></div>`;
+    }
+    return `<div class="filial-row"${critAttr(critCard, u)}><div class="filial-header"><span class="filial-name">${u}</span><span class="filial-total">${fmt(d.coleta.amostra)} coletas · ${fmt(d.descarga.amostra)} descargas</span></div>
     <div class="filial-kpis" style="grid-template-columns:repeat(6,1fr)">
       <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta med.</div><div class="fkpi-v" style="color:${P.coletas}">${hhmm(d.coleta.mediana)}</div><div class="fkpi-s">mediana</div></div>
       <div class="fkpi" style="border-left-color:${P.coletas}"><div class="fkpi-l">Coleta p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.coleta.p90)}</div><div class="fkpi-s">piores 10%</div></div>
@@ -962,6 +973,7 @@ function renderTemposReais(filial){
       <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga p90</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(d.descarga.p90)}</div><div class="fkpi-s">piores 10%</div></div>
       <div class="fkpi" style="border-left-color:${P.entregas}"><div class="fkpi-l">Descarga média</div><div class="fkpi-v" style="color:var(--txt)">${hhmm(d.descarga.media)}</div><div class="fkpi-s">${fmt(d.descarga.amostra)} reg.</div></div>
     </div></div>`;
+  };
   const lK=document.getElementById('tr-klabin-list');
   if(lK) lK.innerHTML=UNIDADES_KLABIN.map(u=>detalhe(u,TEMPOS_UNIDADE_KLABIN[u],'klabin')).join('');
   const lC=document.getElementById('tr-cliente-list');
