@@ -40,6 +40,8 @@ function filtrarPorCriterios(regs, crit){
   if (crit.smCategorias) r = r.filter(x => crit.smCategorias.includes(x.smCategoria));
   if (crit.dentroCarencia !== undefined) r = r.filter(x => x.dentroCarencia === crit.dentroCarencia);
   if (crit.temTempo !== undefined)       r = r.filter(x => x.temTempo === crit.temTempo);
+  if (crit.permMin !== undefined) r = r.filter(x => x.temTempo && x.perm >= crit.permMin);
+  if (crit.permMax !== undefined) r = r.filter(x => x.temTempo && x.perm < crit.permMax);
   if (crit.klabinOrigem) r = r.filter(x => x.klabinOrigem === crit.klabinOrigem);
   if (crit.cliente)      r = r.filter(x => x.cliente === crit.cliente);
   if (crit.smCodigo)     r = r.filter(x => x.smCodigo === crit.smCodigo);
@@ -94,17 +96,33 @@ function renderModalDetalhe(titulo, linhas, semDados){
   if (!linhas.length){
     body.innerHTML = `<div class="mc-empty"><i class="ti ti-mood-empty" style="font-size:20px" aria-hidden="true"></i><br>Nenhum registro encontrado para esse filtro.</div>`;
   } else {
+    // Fisicamente, chegar, posicionar o veículo, abrir e carregar leva pelo
+    // menos ~40min. Coleta com <1h e status "normal" (sem sinalização de
+    // polígono/abertura) é sinal de falha de monitoramento, não eficiência.
+    const ehSuspeita = r => r.tipo==='COLETA' && r.temTempo && r.perm < 60 && (r.smCategoria==='np' || r.smCategoria==='fp');
+    const nSuspeitas = linhas.filter(ehSuspeita).length;
+    const pctSuspeita = Math.round(nSuspeitas/linhas.length*100);
+
+    const alerta = nSuspeitas > 0 ? `<div class="detalhe-alerta">
+      <i class="ti ti-alert-triangle" aria-hidden="true"></i>
+      <div><b>${fmt(nSuspeitas)} de ${fmt(linhas.length)} registros (${pctSuspeita}%)</b> são coletas com menos de 1h e status normal (sem sinalização de polígono ou abertura fora do prazo).
+      Fisicamente é improvável carregar um veículo em menos de 40min–1h — isso costuma indicar <b>falha de monitoramento</b> (chegada e saída registradas quase juntas), não eficiência real.
+      Linhas marcadas com <span class="flag-suspeita">SUSPEITA</span> abaixo.</div>
+    </div>` : '';
+
     const mostrar = linhas.slice(0, 500);
-    body.innerHTML = `<table class="mc-table"><thead><tr>
-      <th>SM</th><th>Filial</th><th>Tipo</th><th>Placa</th><th>Vínculo</th><th>Status chegada</th><th>Permanência</th>
+    body.innerHTML = alerta + `<table class="mc-table"><thead><tr>
+      <th>SM</th><th>Filial</th><th>Tipo</th><th>Origem</th><th>Destino</th><th>Placa</th><th>Vínculo</th><th>Status chegada</th><th>Permanência</th>
     </tr></thead><tbody>${mostrar.map(r => `<tr>
       <td>${r.smCodigo||'—'}</td>
       <td>${r.filial}</td>
       <td>${r.tipo}</td>
+      <td title="${r.origem||''}">${(r.origem||'—').split(' - ')[0]}</td>
+      <td title="${r.destino||''}">${(r.destino||'—').split(' - ')[0]}</td>
       <td>${r.placa||'—'}</td>
       <td>${r.vinculo||'—'}</td>
       <td>${r.statusChegada||'—'}</td>
-      <td>${r.temTempo && typeof hhmm==='function' ? hhmm(r.perm) : '—'}</td>
+      <td>${r.temTempo && typeof hhmm==='function' ? hhmm(r.perm) : '—'}${ehSuspeita(r) ? '<span class="flag-suspeita">SUSPEITA</span>' : ''}</td>
     </tr>`).join('')}</tbody></table>
     ${linhas.length>500 ? `<div class="cnote" style="padding:10px 4px"><i class="ti ti-info-circle" aria-hidden="true"></i>Mostrando os primeiros 500 de ${fmt(linhas.length)} registros.</div>` : ''}`;
   }
@@ -919,16 +937,31 @@ function renderTemposReais(filial){
       {label:'p90 descarga',data:FILIAIS.map(f=>TEMPOS_FILIAL_TIPO[f]?.descarga?.p90||0),backgroundColor:P.entregas+'55',borderRadius:3,borderSkipped:false},
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:30,autoSkip:false}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
-  // Klabin
+  // Embarcadores — 5 menores, 5 medianas, 5 maiores tempos de coleta.
+  // Clique em cada card abre o detalhe dos registros REAIS naquela faixa
+  // (não só dos 5 listados — todos os que caem no intervalo de tempo).
   const bsK=document.getElementById('bs-tr-klabin');
-  if(bsK && UNIDADES_KLABIN.length){
-    const top=UNIDADES_KLABIN[0], topD=TEMPOS_UNIDADE_KLABIN[top];
-    const worst=UNIDADES_KLABIN.reduce((w,u)=>(TEMPOS_UNIDADE_KLABIN[u]?.coleta?.mediana||0)>(TEMPOS_UNIDADE_KLABIN[w]?.coleta?.mediana||0)?u:w,UNIDADES_KLABIN[0]);
-    const worstD=TEMPOS_UNIDADE_KLABIN[worst];
-    bsK.innerHTML=[
-      {c:P.coletas,ic:'ti-building-factory-2',val:hhmm(topD.coleta.mediana),lbl:top+' (maior volume)',sub:`${fmt(topD.coleta.amostra)} coletas · p90 ${hhmm(topD.coleta.p90)}`, crit:{klabinOrigem:top,tipo:'COLETA',temTempo:true}, tit:'Coletas — '+top},
-      {c:P.excedente,ic:'ti-alert-triangle',val:hhmm(worstD.coleta.mediana),lbl:worst+' (maior tempo)',sub:`p90 ${hhmm(worstD.coleta.p90)}`, crit:{klabinOrigem:worst,tipo:'COLETA',temTempo:true}, tit:'Coletas — '+worst},
-    ].map(bigStatHtml).join('');
+  const comDados = UNIDADES_KLABIN.filter(u => TEMPOS_UNIDADE_KLABIN[u]?.coleta?.amostra)
+    .sort((a,b)=>TEMPOS_UNIDADE_KLABIN[a].coleta.mediana - TEMPOS_UNIDADE_KLABIN[b].coleta.mediana);
+  if(bsK && comDados.length){
+    const n = comDados.length;
+    const menores = comDados.slice(0,5);
+    const maiores = comDados.slice(-5).reverse();
+    const meioIdx = Math.max(0, Math.min(n-5, Math.floor(n/2)-2));
+    const medianos = comDados.slice(meioIdx, meioIdx+5);
+    const cbFil = { filial: filial!=='TODAS'?filial:undefined };
+
+    const miniCard = (titulo, icone, cor, itens, crit, subtitulo) => `
+      <div class="mini-rank-card" style="border-top-color:${cor}"${critAttr(crit, titulo)}>
+        <div class="mini-rank-head"><i class="ti ${icone}" aria-hidden="true" style="color:${cor}"></i><span>${titulo}</span></div>
+        <div class="mini-rank-sub">${subtitulo}</div>
+        <ol class="mini-rank-list">${itens.map(u=>`<li><span class="mini-rank-nome" title="${u}">${u}</span><span class="mini-rank-val" style="color:${cor}">${hhmm(TEMPOS_UNIDADE_KLABIN[u].coleta.mediana)}</span></li>`).join('')}</ol>
+      </div>`;
+
+    bsK.innerHTML =
+      miniCard('5 menores tempos', 'ti-arrow-down', P.noPrazo, menores, {...cbFil, tipo:'COLETA', permMax:60}, 'Coleta com mediana mais rápida · clique pra ver tudo abaixo de 1h00') +
+      miniCard('5 medianas', 'ti-arrows-vertical', P.mediana, medianos, {...cbFil, tipo:'COLETA', permMin:60, permMax:CARENCIA_MIN}, 'Embarcadores no meio da distribuição · clique pra ver a faixa 1h–5h') +
+      miniCard('5 maiores tempos', 'ti-arrow-up', P.excedente, maiores, {...cbFil, tipo:'COLETA', permMin:CARENCIA_MIN}, 'Coleta com mediana mais lenta · clique pra ver tudo acima de 5h');
   }
   mkLeg('lg-tr-klabin',[['Mediana coleta',P.coletas],['Mediana descarga',P.entregas],['p90 coleta',P.coletas+'77'],['p90 descarga',P.entregas+'77']]);
   kill('c-tr-klabin');
@@ -941,17 +974,26 @@ function renderTemposReais(filial){
       {label:'p90 descarga',data:UNIDADES_KLABIN.map(u=>TEMPOS_UNIDADE_KLABIN[u]?.descarga?.p90||0),backgroundColor:P.entregas+'55',borderRadius:3,borderSkipped:false},
     ]},
     options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:35,autoSkip:false,font:{size:9}}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
-  // Clientes — só descarga (coleta não existe pra cliente, exceto raros
-  // pontos que também funcionam como unidade Klabin, ex: Forest Paper)
-  const cliSort=[...CLIENTES].sort((a,b)=>(TEMPOS_CLIENTE[b]?.descarga?.mediana||0)-(TEMPOS_CLIENTE[a]?.descarga?.mediana||0));
-  mkLeg('lg-tr-cliente',[['Mediana descarga',P.entregas]]);
-  kill('c-tr-cliente');
-  const cvC=document.getElementById('c-tr-cliente');
-  if(cvC) CH['c-tr-cliente']=new Chart(cvC,{type:'bar',
-    data:{labels:cliSort,datasets:[
-      {label:'Mediana descarga',data:cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.descarga?.mediana||0),backgroundColor:P.entregas,borderRadius:3,borderSkipped:false},
-    ]},
-    options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.x)}`}}},scales:{x:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}},y:{...sc(c),ticks:{...sc(c).ticks,font:{size:9}}}}}});
+  // Clientes — tabela de ranking, top 10 (nomes longos ficam ilegíveis em barra horizontal)
+  const cliSort=[...CLIENTES].sort((a,b)=>(TEMPOS_CLIENTE[b]?.descarga?.mediana||0)-(TEMPOS_CLIENTE[a]?.descarga?.mediana||0)).slice(0,10);
+  const maxMedianaCli = Math.max(1, ...cliSort.map(cl=>TEMPOS_CLIENTE[cl]?.descarga?.mediana||0));
+  const tabWrap = document.getElementById('cliente-tabela-wrap');
+  if (tabWrap){
+    tabWrap.innerHTML = `<table class="rk-table"><thead><tr>
+      <th></th><th>Cliente</th><th>Mediana descarga</th><th></th><th>p90</th><th>Volume</th>
+    </tr></thead><tbody>${cliSort.map((cl,i)=>{
+      const d = TEMPOS_CLIENTE[cl]?.descarga || {mediana:0,p90:0,amostra:0};
+      const w = Math.round((d.mediana/maxMedianaCli)*100);
+      return `<tr${critAttr({cliente:cl}, cl)}>
+        <td class="rk-pos">${i+1}</td>
+        <td class="rk-nome" title="${cl}">${cl}</td>
+        <td class="rk-val" style="color:${P.entregas}">${hhmm(d.mediana)}</td>
+        <td class="rk-bar-cell"><div class="rk-bar-track"><div class="rk-bar-fill" style="width:${w}%;background:${P.entregas}"></div></div></td>
+        <td class="rk-val" style="color:${P.p90}">${hhmm(d.p90)}</td>
+        <td class="rk-vol">${fmt(d.amostra)} entregas</td>
+      </tr>`;
+    }).join('')}</tbody></table>`;
+  }
   // Listas detalhadas
   const detalhe=(u,d,tipoDim)=>{
     const semColeta = tipoDim==='cliente' && (!d.coleta || !d.coleta.amostra);

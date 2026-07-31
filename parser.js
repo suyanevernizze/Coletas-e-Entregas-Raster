@@ -53,7 +53,9 @@ function ehPlaceholder(d){
   return d && d.getFullYear() === 1900 && d.getMonth() === 0 && d.getDate() === 1;
 }
 
-function ehKlabin(s){ return String(s||'').toUpperCase().includes('KLABIN'); }
+// Classificação simples: unidade de coleta = qualquer origem com linha
+// de COLETA. Cliente = qualquer destino com linha de ENTREGA. Um mesmo
+// local pode aparecer nas duas listas (ex: Forest Paper coleta e recebe).
 
 // Nome curto: parte antes do primeiro " - " (usado para clientes)
 function nomeCurto(s){
@@ -63,10 +65,14 @@ function nomeCurto(s){
 
 // Nome da unidade: parte do meio quando há 3+ segmentos
 // "KLABIN SA - ORTIGUEIRA - ORTIGUEIRA/PR" → "ORTIGUEIRA"
+// Nome completo da unidade: junta empresa + planta, sem repetir a cidade/UF do final.
+// "KLABIN SA - ORTIGUEIRA - ORTIGUEIRA/PR" → "KLABIN SA - ORTIGUEIRA"
+// "ARMAZEM CORREIA PINTO - KLABIN LG02 - CORREIA PINTO/SC" → "ARMAZEM CORREIA PINTO - KLABIN LG02"
+// "CONTLOG LOGISTICA... - ILHOTA/SC" (2 partes) → "CONTLOG LOGISTICA..." (já é o nome completo)
 function nomeUnidade(s){
   if (!s) return '—';
   const parts = String(s).split(' - ').map(p => p.trim());
-  return parts.length >= 3 ? parts[1] : parts[0];
+  return parts.length >= 3 ? `${parts[0]} - ${parts[1]}` : parts[0];
 }
 
 // Filiais não-operacionais (ignoradas nos cálculos)
@@ -177,7 +183,7 @@ function parseLinhas(rows){
       statusChegada, smCategoria,
       perm,
       temTempo: perm != null,
-      klabinOrigem: ehKlabin(r[COL.origem]) ? nomeUnidade(r[COL.origem]) : null,
+      klabinOrigem: tipo === 'COLETA' ? nomeUnidade(r[COL.origem]) : null,
       cliente: tipo === 'ENTREGA' ? nomeCurto(r[COL.destino]) : null,
       dentroCarencia: perm != null ? perm <= CARENCIA_MIN : null,
     });
@@ -243,17 +249,17 @@ function agregarRegistros(registros){
   klabinSet.forEach(u => {
     volKlabin[u] = validos.filter(r=>r.klabinOrigem===u && r.tipo==='COLETA').length;
   });
-  const UNIDADES_KLABIN = klabinSet.sort((a,b) => volKlabin[b]-volKlabin[a]).slice(0, 15);
+  const UNIDADES_KLABIN = klabinSet.sort((a,b) => volKlabin[b]-volKlabin[a]);
   const TEMPOS_UNIDADE_KLABIN = {};
   UNIDADES_KLABIN.forEach(u => {
     const col = stats(validos.filter(r=>r.klabinOrigem===u && r.tipo==='COLETA').map(r=>r.perm));
     // descarga associada: entregas cuja origem é essa mesma unidade Klabin
-    const desc = stats(validos.filter(r=>r.tipo==='ENTREGA' && ehKlabin(r.origem) && nomeUnidade(r.origem)===u).map(r=>r.perm));
+    const desc = stats(validos.filter(r=>r.tipo==='ENTREGA' && nomeUnidade(r.origem)===u).map(r=>r.perm));
     TEMPOS_UNIDADE_KLABIN[u] = { coleta: col, descarga: desc };
   });
 
   // ── Clientes (destino das entregas) — exclui destinos internos Klabin ──
-  const cliSet = [...new Set(validos.filter(r=>r.tipo==='ENTREGA' && r.cliente && !ehKlabin(r.cliente)).map(r=>r.cliente))];
+  const cliSet = [...new Set(validos.filter(r=>r.tipo==='ENTREGA' && r.cliente).map(r=>r.cliente))];
   const volCli = {};
   cliSet.forEach(c => { volCli[c] = validos.filter(r=>r.cliente===c).length; });
   const CLIENTES = cliSet.sort((a,b) => volCli[b]-volCli[a]).slice(0, 20);
