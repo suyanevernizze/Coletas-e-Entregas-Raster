@@ -272,52 +272,8 @@
 
     <!-- ═══ ABA PERMANÊNCIA ═══ -->
     <div class="tab-panel" id="p-perm">
-      <div class="subtabs">
-        <div class="subtab on" onclick="subAbaPerm('carencia')" id="sub-carencia"><i class="ti ti-file-certificate" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Carência</div>
-        <div class="subtab" onclick="subAbaPerm('tempos-reais')" id="sub-tempos-reais"><i class="ti ti-clock-hour-4" style="font-size:11px;margin-right:3px" aria-hidden="true"></i>Tempos reais</div>
-      </div>
-
-      <!-- SUB: CARÊNCIA -->
-      <div class="sub-panel on" id="sp-carencia">
-        <div class="rule"><strong>Carência contratual: 5h00 por cliente.</strong><br>
-          Permanência = <span style="color:#26C6DA;font-weight:600">saída − chegada</span> no ponto.
-          Abaixo de 5h está previsto em contrato; acima, vira <span style="color:#D81B60;font-weight:600">excedente</span>.<br>
-          <span style="color:var(--txt3)">Mediana = caminhão do meio · p90 = limite dos 10% piores.</span>
-        </div>
-        <div class="sdiv">Exposição contratual — carência de 5h00</div>
-        <div class="big-stats-row" id="bs-perm"></div>
-        <div class="sdiv">Indicadores da operação</div>
-        <div class="krow" id="kperm"></div>
-        <div class="g2">
-          <div class="card">
-            <div class="ct"><i class="ti ti-chart-histogram" aria-hidden="true"></i>Distribuição por faixa de permanência</div>
-            <div class="leg" id="lg-perm-faixa"></div>
-            <div style="position:relative;height:200px"><canvas id="c-perm-faixa"></canvas></div>
-            <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>As duas últimas faixas ultrapassam a carência de 5h.</div>
-          </div>
-          <div class="card">
-            <div class="ct"><i class="ti ti-alarm" aria-hidden="true"></i>Estouros de carência por filial</div>
-            <div style="position:relative;height:200px"><canvas id="c-perm-estouro"></canvas></div>
-            <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>Registros com permanência acima de 5h00.</div>
-          </div>
-        </div>
-        <div class="sdiv">Mediana vs. p90 por filial</div>
-        <div class="card">
-          <div class="ct"><i class="ti ti-chart-bar" aria-hidden="true"></i>Metade resolve na mediana — as piores 10% levam o p90</div>
-          <div class="leg" id="lg-perm-fil"></div>
-          <div style="position:relative;height:280px"><canvas id="c-perm-fil"></canvas></div>
-          <div class="cnote"><i class="ti ti-info-circle" aria-hidden="true"></i>Distância curta entre mediana e p90 = operação estável.</div>
-        </div>
-        <div class="sdiv">Detalhamento por filial</div>
-        <div class="filial-list" id="perm-list"></div>
-      </div>
-
-      <!-- SUB: TEMPOS REAIS -->
-      <div class="sub-panel" id="sp-tempos-reais">
-        <div class="rule"><strong>Tempos reais de operação — coleta e descarga.</strong><br>
-          O que importa aqui é <span style="color:#29B6F6;font-weight:600">quanto tempo de fato leva</span> cada operação, independente da carência.<br>
-          <span style="color:var(--txt3)">4h50 dentro da carência ≠ eficiente. Aqui a gente enxerga isso.</span>
-        </div>
+      <!-- SUB: TEMPOS REAIS (única aba de Permanência por enquanto — Carência será reconstruída depois) -->
+      <div class="sub-panel on" id="sp-tempos-reais">
         <div class="sdiv">Visão geral — coleta vs. descarga</div>
         <div class="big-stats-row" id="bs-tr-geral"></div>
         <div class="sdiv">Tempos por filial</div>

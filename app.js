@@ -847,72 +847,10 @@ function calcPerm(filial, tipo){
     p90: filial==='TODAS'?percentilFaixa(faixas,0.9):pf[filial].p90 };
 }
 
-function subAbaPerm(t){
-  ['carencia','tempos-reais'].forEach(id=>{
-    const sp=document.getElementById('sp-'+id), sb=document.getElementById('sub-'+id);
-    if(sp) sp.classList.toggle('on', id===t);
-    if(sb) sb.classList.toggle('on', id===t);
-  });
-  setTimeout(()=>{ re(); }, 50);
-}
-
 function bigStatHtml(b){
   return `<div class="big-stat"${critAttr(b.crit,b.tit||b.lbl)}><div class="big-stat-icon" style="background:${b.c}22"><i class="ti ${b.ic}" style="color:${b.c};font-size:20px" aria-hidden="true"></i></div><div><div class="big-stat-val" style="color:${b.c}">${b.val}</div><div class="big-stat-lbl">${b.lbl}</div><div class="big-stat-sub">${b.sub}</div></div></div>`;
 }
 
-function renderCarencia(filial, tipo){
-  const P=CORES, c=cs();
-  const d=calcPerm(filial, tipo);
-  const T=d.amostra||1;
-  const cbP = { filial: filial!=='TODAS'?filial:undefined, tipo: tipo!=='TODOS'?tipo:undefined };
-  const bs=document.getElementById('bs-perm');
-  if(bs) bs.innerHTML=[
-    {c:P.noPrazo,ic:'ti-circle-check',val:`${pct(d.dentro,T)}%`,lbl:'Dentro da carência',sub:`${fmt(d.dentro)} de ${fmt(T)} até 5h00`, crit:{...cbP,dentroCarencia:true}, tit:'Dentro da carência (até 5h)'},
-    {c:P.excedente,ic:'ti-alarm',val:fmt(d.fora),lbl:'Estouros de carência',sub:`${pct(d.fora,T)}% passaram de 5h00`, crit:{...cbP,dentroCarencia:false}, tit:'Estouros de carência (acima de 5h)'},
-    {c:P.foraAlvo,ic:'ti-hourglass-high',val:fmt(Math.round(d.excedente)),lbl:'Horas excedentes',sub:'estimativa além das 5h', crit:{...cbP,dentroCarencia:false}, tit:'Registros com excedente'},
-    {c:P.p90,ic:'ti-arrow-bar-to-up',val:hhmm(d.p90),lbl:'p90 (piores 10%)',sub:'10% passam disso', crit:{...cbP,temTempo:true}, tit:'Permanência apurada (amostra completa)'},
-  ].map(bigStatHtml).join('');
-  const kp=document.getElementById('kperm');
-  if(kp) kp.innerHTML=[
-    {k:'med',ic:'ti-clock-hour-4',l:'Mediana',v:hhmm(d.mediana),s:'caminhão do meio',c:P.mediana,w:Math.min(100,Math.round(d.mediana/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada na mediana'},
-    {k:'p90',ic:'ti-clock-exclamation',l:'Piores 10% (p90)',v:hhmm(d.p90),s:'limite dos piores',c:P.p90,w:Math.min(100,Math.round(d.p90/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada no p90'},
-    {k:'saida',ic:'ti-calculator',l:'Média',v:hhmm(d.media),s:'puxada pela cauda',c:'#AB47BC',w:Math.min(100,Math.round(d.media/CARENCIA_MIN*100)), crit:{...cbP,temTempo:true}, tit:'Amostra usada na média'},
-    {k:'alvo',ic:'ti-target',l:'Carência',v:hhmm(CARENCIA_MIN),s:'5h contrato',c:P.carencia,w:100},
-    {k:'exc',ic:'ti-alarm',l:'Estouros',v:fmt(d.fora),s:`${pct(d.fora,T)}%`,c:P.excedente,w:pct(d.fora,T), crit:{...cbP,dentroCarencia:false}, tit:'Estouros de carência'},
-    {k:'tot',ic:'ti-sum',l:'Registros',v:fmt(T),s:'com tempo apurado',c:'#FFD600',w:100, crit:{...cbP,temTempo:true}, tit:'Registros com tempo apurado'},
-  ].map(kpiHtml).join('');
-  const coresFaixa=TEMPOS_FAIXAS.estouro.map(e=>e?P.excedente:P.mediana);
-  mkLeg('lg-perm-faixa',[['Dentro da carência',P.mediana],['Acima de 5h00',P.excedente]]);
-  kill('c-perm-faixa');
-  const cvF=document.getElementById('c-perm-faixa');
-  if(cvF) CH['c-perm-faixa']=new Chart(cvF,{type:'bar',
-    data:{labels:TEMPOS_FAIXAS.labels,datasets:[{data:d.faixas,backgroundColor:coresFaixa,borderRadius:4,borderSkipped:false}]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.parsed.y.toLocaleString('pt-BR')} reg. (${pct(x.parsed.y,d.faixas.reduce((a,b)=>a+b,0))}%)`}}},scales:{x:sc(c),y:{...sc(c),min:0}}}});
-  hb1('c-perm-estouro',FILIAIS,FILIAIS.map(f=>{const t=tipo==='TODOS'?['COLETA','ENTREGA']:[tipo];return t.reduce((s,x)=>s+(TEMPOS[f]?.[x]?.fora||0),0);}),P.excedente);
-  mkLeg('lg-perm-fil',[['Mediana',P.mediana],['p90 (piores 10%)',P.p90],['Carência 5h',P.carencia]]);
-  kill('c-perm-fil');
-  const cvFil=document.getElementById('c-perm-fil');
-  if(cvFil) CH['c-perm-fil']=new Chart(cvFil,{type:'bar',
-    data:{labels:FILIAIS.map(f=>f.replace('FL ','')),datasets:[
-      {label:'Mediana',data:FILIAIS.map(f=>calcPerm(f,tipo).pf[f].mediana),backgroundColor:P.mediana,borderRadius:3,borderSkipped:false},
-      {label:'p90',data:FILIAIS.map(f=>calcPerm(f,tipo).pf[f].p90),backgroundColor:P.p90,borderRadius:3,borderSkipped:false},
-      {label:'Carência',type:'line',data:FILIAIS.map(()=>CARENCIA_MIN),borderColor:P.carencia,borderWidth:2,borderDash:[6,4],pointRadius:0,fill:false},
-    ]},
-    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false},tooltip:{...tt(c),callbacks:{label:x=>` ${x.dataset.label}: ${hhmm(x.parsed.y)}`}}},scales:{x:{...sc(c),ticks:{...sc(c).ticks,maxRotation:30,autoSkip:false}},y:{...sc(c),min:0,ticks:{...sc(c).ticks,callback:v=>hhmm(v)}}}}});
-  const lista=document.getElementById('perm-list');
-  if(lista) lista.innerHTML=d.fils.map(f=>{
-    const pd=d.pf[f]; const tt2=pd.amostra||1;
-    const bars=[{l:'Dentro 5h',v:pd.dentro,c:P.noPrazo},{l:'Acima 5h',v:pd.fora,c:P.excedente}];
-    return `<div class="filial-row"${critAttr({...cbP, filial:f}, f)}><div class="filial-header"><span class="filial-name">${f}</span><span class="filial-total">${fmt(pd.amostra)} reg. · mediana ${hhmm(pd.mediana)}</span></div>
-      <div class="filial-bars">${bars.map(b=>`<div class="fbar-item"><span class="fbar-label">${b.l}</span><div class="fbar-track"><div class="fbar-fill" style="width:${pct(b.v,tt2)}%;background:${b.c}"></div></div><span class="fbar-pct" style="color:${b.c}">${pct(b.v,tt2)}%</span></div>`).join('')}</div>
-      <div class="filial-kpis">
-        <div class="fkpi" style="border-left-color:${P.mediana}"><div class="fkpi-l">Mediana</div><div class="fkpi-v" style="color:${P.mediana}">${hhmm(pd.mediana)}</div><div class="fkpi-s">caminhão do meio</div></div>
-        <div class="fkpi" style="border-left-color:${P.p90}"><div class="fkpi-l">Piores 10%</div><div class="fkpi-v" style="color:${P.p90}">${hhmm(pd.p90)}</div><div class="fkpi-s">p90</div></div>
-        <div class="fkpi" style="border-left-color:${P.excedente}"><div class="fkpi-l">Estouros</div><div class="fkpi-v" style="color:${P.excedente}">${fmt(pd.fora)}</div><div class="fkpi-s">acima de 5h</div></div>
-        <div class="fkpi" style="border-left-color:${P.noPrazo}"><div class="fkpi-l">Cumprimento</div><div class="fkpi-v" style="color:${P.noPrazo}">${pct(pd.dentro,tt2)}%</div><div class="fkpi-s">na carência</div></div>
-      </div></div>`;
-  }).join('');
-}
 
 function renderTemposReais(filial){
   const P=CORES, c=cs();
@@ -1024,7 +962,6 @@ function renderTemposReais(filial){
 
 function renderPermanencia(filial, tipo){
   if (typeof TEMPOS==='undefined' || !FILIAIS.length) return;
-  renderCarencia(filial, tipo);
   renderTemposReais(filial);
 }
 
